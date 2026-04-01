@@ -89,6 +89,8 @@ DAG Runner 负责执行 SOP 画布中的有向无环图。关键设计要点：
 
 **无状态实例设计 (Stateless Instance)**：为支持 Worker 节点的横向弹性扩缩容，执行引擎内部**严禁持有任何内存状态**。无论是 ReAct 的历史对话上下文，还是 DAG 的共享黑板数据，在每次推演步（Step）结束后，都必须序列化并追加写入 (Append-only) 到外部的 StateDB（如 Redis 或 DynamoDB）中。当任务因等待外部回调而挂起时，当前 Worker 线程立即销毁；当回调唤醒时，任意一台空闲 Worker 均可从 StateDB 拉取快照，瞬间恢复执行现场。
 
+> **任务快照持久化约束（v9.1）**：`mao_task` 表仅保存 `state_snapshot_key`（指向 Redis/DynamoDB 的外置快照键）。**MySQL 不落快照正文**，任何任务恢复、审计回放必须先通过该 Key 到 StateDB 读取快照内容。
+
 黑板配备预定义的 JSON Schema，Agent 写入时利用 Zod/Pydantic 引擎进行拦截校验，并在系统 Prompt 末尾动态注入明确的 Markdown 约束指引（如"严禁创造任何其他键名"）。
 
 **多智能体幻觉纠偏**：如果 Agent 无法输出符合黑板 Schema 的参数，先触发将"Schema 结构与错误输出打包"重新喂给模型的 Local Retry。若 3 次局部重试仍无法输出下游必备的强依赖参数，执行引擎立即阻断流程，标记为 `Failed_Data_Missing`，并抛出异常卡片，将机器死锁降级为向人类索要填参的轻量级交互。

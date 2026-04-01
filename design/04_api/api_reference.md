@@ -498,8 +498,17 @@ GET /admin/tasks/active
 
 **响应示例**：
 ```json
-{ "code": 200, "data": { "items": [{"task_id": "tsk_01", "status": "RUNNING"}], "page_info": {"total": 1208, "has_more": true} } }
+{ "code": 200, "data": { "items": [{"task_id": "tsk_01", "status": "RUNNING", "state_snapshot_key": "snapshot:task:tsk_01:step_12"}], "page_info": {"total": 1208, "has_more": true} } }
 ```
+
+**字段语义（任务状态读取）**：
+
+| 字段名 | 类型 | 语义 | 数据来源 |
+|---|---|---|---|
+| `status` | `string` | 任务当前状态（如 `RUNNING` / `SUSPENDED`） | MySQL `mao_task.status` |
+| `state_snapshot_key` | `string \| null` | 任务快照引用键，仅用于到 StateDB 二次读取快照正文 | MySQL `mao_task.state_snapshot_key` |
+
+> 注意：`state_snapshot_key` 不是快照正文。快照正文只存 Redis/DynamoDB；前端与运维侧均不得尝试直接从 MySQL 读取任务快照内容。
 
 #### 8.7.2 强制燔断挂起任务
 

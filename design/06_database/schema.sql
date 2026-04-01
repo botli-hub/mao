@@ -56,7 +56,7 @@ CREATE TABLE `mao_task` (
   `workflow_id`       VARCHAR(64)                           COMMENT '承接的 SOP 画布 ID（与 agent_id 二选一）',
   `status`            VARCHAR(32)   NOT NULL DEFAULT 'PENDING' COMMENT '任务状态（见 TaskStatus 枚举）',
   `fail_reason`       VARCHAR(64)                           COMMENT '失败原因（见 TaskFailReason 枚举）',
-  `state_snapshot`    LONGTEXT                              COMMENT '深冻结时的任务状态序列化 JSON',
+  `state_snapshot_key` VARCHAR(128)                         COMMENT 'StateDB 外置快照的 Key，实际快照存储于 Redis/DynamoDB',
   `execution_version` VARCHAR(32)                           COMMENT '执行时绑定的 SOP 版本号（如 v1.0）',
   `oa_ticket_id`      VARCHAR(64)                           COMMENT '关联的 OA 审批单号',
   `idempotency_key`   VARCHAR(128)                          COMMENT '幂等键: {task_id}_{card_action_id}',
@@ -67,6 +67,7 @@ CREATE TABLE `mao_task` (
   UNIQUE KEY `uk_idempotency_key` (`idempotency_key`),
   KEY `idx_session_id` (`session_id`),
   KEY `idx_status` (`status`),
+  KEY `idx_state_snapshot_key` (`state_snapshot_key`),
   KEY `idx_oa_ticket_id` (`oa_ticket_id`),
   CONSTRAINT `fk_task_session` FOREIGN KEY (`session_id`) REFERENCES `mao_session` (`session_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='任务实例表';
@@ -233,14 +234,9 @@ CREATE TABLE `mao_channel_session` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='渠道会话映射表';
 
 -- ============================================================
--- v9.1 变更：mao_task 表 state_snapshot 字段重构
--- 原字段 state_snapshot LONGTEXT 已废弃，改为 state_snapshot_key
--- 实际快照存储于 Redis/DynamoDB，MySQL 仅存储 Key 引用
+-- v9.1 变更：mao_task 表快照字段重构
+-- 实际迁移脚本见：design/06_database/migrations/20260401_migrate_mao_task_state_snapshot_to_key.sql
 -- ============================================================
--- 注意：如果在已有数据库上执行，需先执行以下迁移语句：
--- ALTER TABLE `mao_task` DROP COLUMN `state_snapshot`;
--- ALTER TABLE `mao_task` ADD COLUMN `state_snapshot_key` VARCHAR(128) DEFAULT NULL COMMENT 'StateDB 外置快照的 Key，实际快照存储于 Redis/DynamoDB' AFTER `status`;
--- ALTER TABLE `mao_task` ADD INDEX `idx_state_snapshot_key` (`state_snapshot_key`);
 
 -- ============================================================
 -- v9.1 变更：mao_offline_inbox 表新增 channel_type 字段
