@@ -1,0 +1,141 @@
+erDiagram
+    MAO_USER {
+        bigint id PK
+        varchar username
+        varchar email
+        varchar role
+        varchar department
+        varchar permission_level
+        datetime created_at
+        datetime updated_at
+    }
+
+    MAO_SESSION {
+        varchar session_id PK
+        bigint user_id FK
+        varchar title
+        text context_window
+        varchar status
+        int message_count
+        datetime created_at
+        datetime updated_at
+    }
+
+    MAO_MESSAGE {
+        bigint id PK
+        varchar session_id FK
+        varchar role
+        text content
+        varchar message_type
+        json card_schema
+        datetime created_at
+    }
+
+    MAO_TASK {
+        varchar task_id PK
+        varchar session_id FK
+        varchar agent_id FK
+        varchar workflow_id FK
+        varchar status
+        json state_snapshot
+        varchar execution_version
+        varchar oa_ticket_id
+        varchar idempotency_key
+        datetime created_at
+        datetime updated_at
+        datetime expired_at
+    }
+
+    MAO_TASK_LOG {
+        bigint id PK
+        varchar task_id FK
+        varchar step_type
+        int step_index
+        json input_data
+        json output_data
+        int duration_ms
+        varchar status
+        datetime created_at
+    }
+
+    MAO_AGENT {
+        varchar agent_id PK
+        varchar name
+        text description
+        text system_prompt
+        int max_steps
+        varchar created_by FK
+        datetime created_at
+        datetime updated_at
+    }
+
+    MAO_SKILL {
+        varchar skill_id PK
+        varchar name
+        text description
+        varchar type
+        varchar auth_type
+        varchar endpoint
+        varchar http_method
+        json input_schema
+        json output_schema
+        long ttl_ms
+        varchar created_by FK
+        datetime created_at
+    }
+
+    MAO_AGENT_SKILL_REL {
+        bigint id PK
+        varchar agent_id FK
+        varchar skill_id FK
+        int sort_order
+    }
+
+    MAO_WORKFLOW {
+        varchar workflow_id PK
+        varchar name
+        text description
+        varchar version
+        json dag_definition
+        varchar status
+        varchar created_by FK
+        datetime created_at
+        datetime updated_at
+    }
+
+    MAO_CRON_JOB {
+        bigint id PK
+        bigint user_id FK
+        varchar job_name
+        varchar cron_expr
+        varchar target_type
+        varchar target_agent_id FK
+        varchar target_workflow_id FK
+        varchar status
+        datetime last_run_at
+        datetime next_run_at
+        datetime expired_at
+        datetime created_at
+    }
+
+    MAO_OFFLINE_INBOX {
+        bigint id PK
+        bigint user_id FK
+        varchar task_id FK
+        text message_content
+        json card_schema
+        varchar status
+        datetime created_at
+        datetime read_at
+    }
+
+    MAO_USER ||--o{ MAO_SESSION : "owns"
+    MAO_SESSION ||--o{ MAO_MESSAGE : "contains"
+    MAO_SESSION ||--o{ MAO_TASK : "spawns"
+    MAO_TASK ||--o{ MAO_TASK_LOG : "generates"
+    MAO_AGENT ||--o{ MAO_AGENT_SKILL_REL : "has"
+    MAO_SKILL ||--o{ MAO_AGENT_SKILL_REL : "belongs to"
+    MAO_TASK }o--|| MAO_AGENT : "dispatched to"
+    MAO_TASK }o--o| MAO_WORKFLOW : "runs"
+    MAO_USER ||--o{ MAO_CRON_JOB : "creates"
+    MAO_USER ||--o{ MAO_OFFLINE_INBOX : "receives"

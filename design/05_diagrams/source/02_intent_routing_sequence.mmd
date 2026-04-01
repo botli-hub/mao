@@ -1,0 +1,35 @@
+sequenceDiagram
+    participant User as 👤 用户 (C端)
+    participant BFF as 🔀 BFF 网关
+    participant Router as 🧠 Router 大脑
+    participant SessionMgr as 📋 Session/Task 管理器
+    participant Agent as 🤖 领域 Agent
+    participant SOP as 🗺️ SOP 画布 (DAG)
+
+    User->>BFF: POST /chat/completions\n{session_id, message}
+    BFF->>SessionMgr: 获取当前活跃任务列表
+    SessionMgr-->>BFF: [Task_A: SUSPENDED, Task_B: RUNNING]
+    BFF->>Router: 转发意图 + 活跃任务上下文
+
+    Router->>Router: 意图消歧分析
+    Note over Router: 1. 检查是否干预已有挂起任务\n2. 计算各 Agent/SOP 置信度
+
+    alt 干预已有挂起任务 (如"撤回刚才的审批")
+        Router->>SessionMgr: 干预 Task_A (SUSPENDED)
+        SessionMgr-->>BFF: 返回操作结果
+    else 置信度清晰 (最高分 > 阈值且差距 > 5分)
+        Router->>Agent: 分发给匹配 Agent
+        Agent->>Agent: ReAct 推演循环
+        Agent-->>BFF: 返回 Observation / 卡片指令
+    else 高危长链路 (匹配到 SOP 宏工具)
+        Router->>SOP: 启动 DAG 画布引擎
+        SOP-->>BFF: 返回执行结果
+    else 置信度接近 (差距 ≤ 5分) 或无匹配
+        Router-->>BFF: 返回意图澄清卡片 JSON
+        BFF-->>User: 渲染【意图澄清卡片】
+        User->>BFF: 手动点选承接方
+        BFF->>Router: 确认承接方 ID
+        Router->>Agent: 分发给选定 Agent
+    end
+
+    BFF-->>User: 流式输出文本 / 渲染卡片

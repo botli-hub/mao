@@ -1,0 +1,36 @@
+graph TD
+    Start([🚀 开始\nDAG 引擎启动]) --> FreezeSnapshot
+    FreezeSnapshot["📸 深度克隆 SOP 画布快照\n(绑定执行版本 v1.0)"] --> Trigger
+
+    Trigger{{"⚡ 触发器类型"}} -->|"用户对话/Agent 调用"| AgentNode1
+    Trigger -->|"定时调度 (Cron)"| AgentNode1
+
+    AgentNode1["🤖 任务配置解析 Agent\n提取预算、人群、权益参数"] --> WriteBlackboard1
+
+    WriteBlackboard1{{"✏️ 写入共享黑板\n(Zod Schema 校验)"}} -->|"校验通过"| AgentNode2
+    WriteBlackboard1 -->|"校验失败"| LocalRetry1
+
+    LocalRetry1{"🔄 Local Retry\n(重试次数 < 3?)"} -->|"是"| AgentNode1
+    LocalRetry1 -->|"否 (3次均失败)"| HumanFallback1
+
+    HumanFallback1["🙋 降级为人工填参\n抛出异常卡片 (缺失关键参数)"] --> WriteBlackboard1
+
+    AgentNode2["🛡️ 规则校验 Agent\n调用风控 API 进行冲突推演"] --> ConditionNode
+
+    ConditionNode{{"🔀 IF 条件判断\n风控结果是否通过?"}} -->|"通过"| AgentNode3
+    ConditionNode -->|"高危/冲突"| SuspendNode
+
+    SuspendNode["⏸️ 挂起等待外部审批\n(Async Skill 深冻结)"] --> ResumeNode
+    ResumeNode["▶️ 回调唤醒\n(OA 审批结果注入)"] --> AgentNode3
+
+    AgentNode3["📊 结果汇总 Agent\n生成最终 GUI 表单"] --> OutputNode
+
+    OutputNode["🖥️ 返回结果 (View Skill)\n输出 JSON Schema 渲染前端卡片"] --> End
+
+    End([✅ 结束\n任务状态: COMPLETED])
+
+    style Start fill:#dcfce7,stroke:#16a34a,color:#14532d
+    style End fill:#dcfce7,stroke:#16a34a,color:#14532d
+    style HumanFallback1 fill:#fef2f2,stroke:#dc2626,color:#7f1d1d
+    style SuspendNode fill:#fef9c3,stroke:#ca8a04,color:#713f12
+    style ResumeNode fill:#eff6ff,stroke:#2563eb,color:#1e3a8a

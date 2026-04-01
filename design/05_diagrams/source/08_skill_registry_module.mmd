@@ -1,0 +1,50 @@
+graph TB
+    subgraph SkillRegistryModule["📦 技能注册中心模块 (Skill Registry)"]
+        direction TB
+        Import["📥 导入向导\n(Swagger / JSON / URL)"]
+        Parser["🔍 Schema 解析器\n(OpenAPI 3.0 解析)"]
+        Validator["✅ Schema 校验器\n(JSON Schema 验证)"]
+        AuthConfig["🔐 鉴权配置\n(User Token / AK-SK / OAuth2)"]
+        InterceptConfig["🛡️ 拦截规则配置\n(PII 脱敏 / 幂等键 / 频率限制)"]
+        SkillDB["💾 技能数据库\n(mao_skill 表)"]
+        SkillIndex["🔎 技能索引\n(向量化 Description 供 Agent 检索)"]
+    end
+
+    subgraph SkillTypes["技能类型 (Skill Types)"]
+        API["🔌 API Skill\n原子接口 (同步)"]
+        View["🖼️ View Skill\n视图交互 (渲染卡片)"]
+        Async["⏳ Async Skill\n长程异步 (深冻结)"]
+        Macro["🗺️ Macro Skill\n复合编排 (DAG)"]
+    end
+
+    subgraph Consumers["消费方"]
+        AgentEngine["🤖 Agent 引擎\n(ReAct Runner)"]
+        DAGEngine["⚙️ DAG 画布引擎"]
+        CronScheduler["⏰ 定时调度器"]
+    end
+
+    Import --> Parser
+    Parser --> Validator
+    Validator --> AuthConfig
+    AuthConfig --> InterceptConfig
+    InterceptConfig --> SkillDB
+    SkillDB --> SkillIndex
+
+    SkillDB --> API
+    SkillDB --> View
+    SkillDB --> Async
+    SkillDB --> Macro
+
+    SkillIndex -->|"语义检索"| AgentEngine
+    API --> AgentEngine
+    View --> AgentEngine
+    Async --> AgentEngine
+    Macro --> AgentEngine
+    API --> DAGEngine
+    Async --> DAGEngine
+    Macro --> DAGEngine
+    API --> CronScheduler
+
+    style SkillRegistryModule fill:#fff7ed,stroke:#ea580c,color:#7c2d12
+    style SkillTypes fill:#f0fdf4,stroke:#16a34a,color:#14532d
+    style Consumers fill:#eff6ff,stroke:#2563eb,color:#1e3a8a

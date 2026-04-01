@@ -1,0 +1,44 @@
+sequenceDiagram
+    participant User as 👤 用户
+    participant BFF as 🔀 BFF 网关
+    participant Engine as ⚙️ 执行引擎
+    participant ToolExec as 🔧 工具执行器
+    participant OA as 🏢 外部 OA 系统
+    participant StateDB as 💾 StateDB (Redis)
+    participant EventGW as 📡 统一事件网关
+
+    User->>BFF: 提交高危操作 (如补发50元券)
+    BFF->>Engine: 触发 ReAct 推演
+    Engine->>ToolExec: 调用 Async Skill (RunCompensateSOP)
+    Note over ToolExec: 检测到 x-mao-suspend: true 标签
+
+    ToolExec->>OA: 发起审批请求
+    OA-->>ToolExec: 返回 PENDING 凭证\n{oa_ticket_id: "OA-2024-991"}
+
+    ToolExec->>BFF: 越权推送"挂起等待审批"卡片
+    BFF-->>User: WebSocket 推送挂起状态卡片
+    Note over User: 输入框立即解锁，可发起新对话
+
+    ToolExec->>StateDB: 序列化任务状态 (深冻结)\n{task_id, state_snapshot, oa_ticket_id}
+    Note over Engine, StateDB: 释放线程与计算资源
+
+    Note over OA: ... 等待人工审批 (最长 72 小时) ...
+
+    alt 审批通过
+        OA->>EventGW: Webhook 回调\n{oa_ticket_id, status: "APPROVED"}
+        EventGW->>EventGW: 清洗为标准 TaskResumeEvent
+        EventGW->>StateDB: 查询并解冻任务状态
+        StateDB-->>EventGW: 返回任务快照
+        EventGW->>Engine: 注入 Observation 唤醒任务\n{result: "APPROVED", approved_by: "..."}
+        Engine->>Engine: 大模型继续推演
+        Engine->>BFF: WebSocket 主动推送最终结果
+        BFF-->>User: 渲染"审批通过，执行完毕"卡片\n(带引用锚点 Quote Anchor)
+    else 审批拒绝
+        OA->>EventGW: Webhook 回调\n{status: "REJECTED", reason: "..."}
+        EventGW->>Engine: 注入 REJECTED Observation
+        Engine->>BFF: 推送"审批被拒绝"卡片
+    else 超时 (TTL 72h 到期)
+        StateDB->>Engine: 调度器强制触发超时
+        Engine->>StateDB: 标记任务为 TIMEOUT_KILLED
+        Engine->>BFF: 推送"任务已超时终止"通知
+    end

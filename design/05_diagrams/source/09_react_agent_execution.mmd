@@ -1,0 +1,52 @@
+graph TD
+    Start([🚀 Agent 接收任务]) --> InjectContext
+
+    InjectContext["📋 构建 Context\n注入 System Prompt + 历史消息\n+ 黑板数据 + 可用技能列表"] --> LLMThink
+
+    LLMThink["🧠 LLM 推理 (Thought)\n分析当前状态，决定下一步行动"] --> ParseAction
+
+    ParseAction{{"📤 解析 LLM 输出"}} -->|"输出 Action (工具调用)"| CheckParallel
+    ParseAction -->|"输出 Final Answer"| FinalAnswer
+    ParseAction -->|"输出格式错误"| SchemaRetry
+
+    SchemaRetry{"🔄 Schema 校验失败\n连续失败次数 < 3?"} -->|"是"| LLMThink
+    SchemaRetry -->|"否 (熔断)"| CircuitBreaker
+
+    CircuitBreaker["⚡ Token 熔断机制\n强制中断推演\n向前端发送兜底卡片"] --> End
+
+    CheckParallel{{"⚡ 是否并行调用?\n(LLM 输出 Array 指令)"}} -->|"是 (并行)"| ParallelExec
+    CheckParallel -->|"否 (串行)"| SerialExec
+
+    ParallelExec["🔀 并发执行\n(Goroutine / Promise.all)\n多个工具同时请求"] --> CollectResults
+    SerialExec["➡️ 串行执行\n单个工具调用"] --> CollectResults
+
+    CollectResults["📦 收集执行结果"] --> CheckSkillType
+
+    CheckSkillType{{"🔍 技能类型分发"}} -->|"API Skill"| APIExec
+    CheckSkillType -->|"View Skill"| ViewExec
+    CheckSkillType -->|"Async Skill"| AsyncExec
+    CheckSkillType -->|"Macro Skill"| MacroExec
+
+    APIExec["🔌 调用外部 API\n(毫秒级返回)"] --> InjectObservation
+    ViewExec["🖼️ 触发前端卡片渲染\n(轻量级挂起 Interactive Pause)"] --> WaitUserInput
+    AsyncExec["⏳ 触发深冻结\n(状态机序列化落盘)"] --> WaitCallback
+    MacroExec["🗺️ 启动 DAG 引擎\n(移交执行权)"] --> InjectObservation
+
+    WaitUserInput["⏸️ 等待用户填写卡片并提交"] --> InjectObservation
+    WaitCallback["⏸️ 等待外部系统回调\n(OA 审批 / Kafka MQ)"] --> InjectObservation
+
+    InjectObservation["💉 注入 Observation\n(工具执行结果)"] --> CheckMaxSteps
+
+    CheckMaxSteps{"📊 检查推演步数\n是否超过 Max_Steps (7步)?"} -->|"否"| LLMThink
+    CheckMaxSteps -->|"是 (熔断)"| CircuitBreaker
+
+    FinalAnswer["✅ 输出最终答案\n(文本 / 卡片)"] --> End
+
+    End([🏁 Agent 执行完毕])
+
+    style Start fill:#dcfce7,stroke:#16a34a,color:#14532d
+    style End fill:#dcfce7,stroke:#16a34a,color:#14532d
+    style CircuitBreaker fill:#fef2f2,stroke:#dc2626,color:#7f1d1d
+    style AsyncExec fill:#fef9c3,stroke:#ca8a04,color:#713f12
+    style ViewExec fill:#eff6ff,stroke:#2563eb,color:#1e3a8a
+    style ParallelExec fill:#fdf4ff,stroke:#9333ea,color:#581c87

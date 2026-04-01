@@ -1,0 +1,29 @@
+sequenceDiagram
+    participant Engine as ⚙️ 执行引擎
+    participant BFF as 🔀 BFF 网关
+    participant WS as 📡 WebSocket 服务
+    participant InboxDB as 📬 离线信箱 (DB)
+    participant User as 👤 用户
+
+    Engine->>Engine: 异步任务在后台执行完毕
+    Engine->>BFF: 通知推送最终结果
+
+    BFF->>WS: 检查用户在线状态
+
+    alt 用户在线 (WebSocket 连接活跃)
+        WS->>User: 主动推送结果消息\n(带引用锚点 Quote Anchor)\n"🔗 引用：配置确认单 -> 审批已通过"
+        User->>User: 实时接收通知
+    else 用户离线 (WebSocket 断开)
+        BFF->>InboxDB: 消息落入离线信箱\n{user_id, task_id, content, card_schema}
+        Note over InboxDB: 消息持久化存储
+    end
+
+    Note over User: ... 用户次日登录 ...
+
+    User->>BFF: 建立 WebSocket 连接 (登录)
+    BFF->>InboxDB: 查询未读离线消息
+    InboxDB-->>BFF: 返回离线消息列表
+    BFF->>User: 推送离线期间消息\n(铃铛图标亮起红点)
+    BFF->>User: 在聊天流底部补绘消息卡片\n(加盖浅灰色视觉分割线)\n"———— 以下为离线期间执行完毕的任务 ————"
+    User->>BFF: 点击查看/确认消息
+    BFF->>InboxDB: 标记消息为已读

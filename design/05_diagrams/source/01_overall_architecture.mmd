@@ -1,0 +1,60 @@
+graph TB
+    subgraph ClientLayer["🖥️ 客户端体验层 (Client Layer)"]
+        C_WS["C端融合工作站\n(LUI + GUI)"]
+        B_MC["B端管理控制台\n(Management Console)"]
+    end
+
+    subgraph GatewayLayer["🔀 统一接入网关层 (Gateway Layer)"]
+        BFF["BFF API 网关\n(WS/HTTP/SSE)"]
+        EventGW["统一事件网关\n(Webhook / Kafka MQ)"]
+    end
+
+    subgraph ControlPlane["🧠 调度控制面 (Control Plane)"]
+        Router["Router 路由大脑\n(Intent Dispatch)"]
+        SessionMgr["Session/Task\n并发管理器"]
+        StateDB["StateDB\n(Redis + MySQL)"]
+    end
+
+    subgraph ExecutionPlane["⚙️ 智能执行面 (Execution Plane)"]
+        ReactRunner["ReAct Runner\n(Agent 引擎)"]
+        DAGRunner["DAG Runner\n(画布引擎)"]
+        Blackboard["共享黑板\n(Typed Blackboard)"]
+        ToolExecutor["工具执行器\n(Tool Executor)"]
+    end
+
+    subgraph AssetLayer["📦 资产与中枢层 (Asset Layer)"]
+        SkillRegistry["技能注册中心\n(Skill Registry)"]
+        RAG["RAG 向量知识库\n(Vector DB)"]
+    end
+
+    subgraph ExternalLayer["🌐 外部生态层 (External Layer)"]
+        BizSvc["核心业务微服务\n(秒级返回)"]
+        OASvc["OA 审批系统\n(长程依赖)"]
+        Kafka["Kafka 消息队列\n(异步事件)"]
+    end
+
+    C_WS <-->|"WebSocket / HTTP"| BFF
+    B_MC <-->|"HTTP REST"| BFF
+    BFF <--> Router
+    BFF <--> SessionMgr
+    Router --> ReactRunner
+    Router --> DAGRunner
+    SessionMgr <--> StateDB
+    ReactRunner <--> Blackboard
+    DAGRunner <--> Blackboard
+    ReactRunner --> ToolExecutor
+    DAGRunner --> ToolExecutor
+    ToolExecutor --> SkillRegistry
+    ToolExecutor --> RAG
+    SkillRegistry --> BizSvc
+    SkillRegistry --> OASvc
+    OASvc -->|"Webhook/MQ 回调"| EventGW
+    Kafka -->|"事件订阅"| EventGW
+    EventGW --> SessionMgr
+
+    style ClientLayer fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
+    style GatewayLayer fill:#f0fdf4,stroke:#16a34a,color:#14532d
+    style ControlPlane fill:#fef9c3,stroke:#ca8a04,color:#713f12
+    style ExecutionPlane fill:#fdf4ff,stroke:#9333ea,color:#581c87
+    style AssetLayer fill:#fff7ed,stroke:#ea580c,color:#7c2d12
+    style ExternalLayer fill:#f1f5f9,stroke:#64748b,color:#1e293b

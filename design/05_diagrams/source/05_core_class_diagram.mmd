@@ -1,0 +1,141 @@
+classDiagram
+    direction LR
+
+    class Session {
+        +String sessionId
+        +String userId
+        +String title
+        +SessionStatus status
+        +List~Message~ messages
+        +List~Task~ tasks
+        +createTask(Intent intent) Task
+        +addMessage(Message msg) void
+    }
+
+    class Task {
+        +String taskId
+        +String sessionId
+        +String agentId
+        +String workflowId
+        +TaskStatus status
+        +StateSnapshot stateSnapshot
+        +String executionVersion
+        +execute() void
+        +suspend(String ticketId) void
+        +resume(Object observation) void
+        +kill() void
+    }
+
+    class Router {
+        +dispatch(Intent intent, List~Task~ activeTasks) DispatchResult
+        -calculateConfidence(Intent intent) Map~String, Double~
+        -checkActiveTaskInterference(Intent intent, List~Task~ tasks) Optional~Task~
+        -buildDisambiguationCard() CardSchema
+    }
+
+    class Agent {
+        +String agentId
+        +String name
+        +String description
+        +String systemPrompt
+        +List~Skill~ skills
+        +List~KnowledgeBase~ knowledgeBases
+        +int maxSteps
+        +reason(Context context) Action
+        +executeReActLoop(Context context) Observation
+    }
+
+    class Skill {
+        <<interface>>
+        +String skillId
+        +String name
+        +SkillType type
+        +AuthType authType
+        +JSONSchema inputSchema
+        +JSONSchema outputSchema
+        +execute(Map params) Object
+        +getSchema() JSONSchema
+    }
+
+    class ApiSkill {
+        +String endpoint
+        +HttpMethod method
+        +String authToken
+        +execute(Map params) Object
+    }
+
+    class ViewSkill {
+        +String viewTemplate
+        +JSONSchema formSchema
+        +execute(Map params) CardSchema
+    }
+
+    class AsyncSkill {
+        +long ttlMs
+        +String callbackEndpoint
+        +execute(Map params) SuspendTicket
+    }
+
+    class MacroSkill {
+        +String workflowId
+        +execute(Map params) Object
+    }
+
+    class Workflow {
+        +String workflowId
+        +String name
+        +String version
+        +List~Node~ nodes
+        +List~Edge~ edges
+        +Blackboard blackboard
+        +execute(Map initialParams) Object
+        +executeFromNode(String nodeId, Map params) Object
+    }
+
+    class Node {
+        +String nodeId
+        +NodeType type
+        +Map inputMapping
+        +Map outputVariables
+        +execute(Blackboard board) void
+    }
+
+    class Blackboard {
+        +String taskId
+        +Map~String, Object~ memory
+        +JSONSchema schema
+        +write(String key, Object value) void
+        +read(String key) Object
+        -validate(String key, Object value) boolean
+        -localRetry(String key, Object failedValue) boolean
+    }
+
+    class ToolExecutor {
+        +executeTool(String skillId, Map params) Object
+        -piiMask(Map params) Map
+        -piiUnmask(Object result) Object
+        -checkIdempotency(String taskId, String actionId) boolean
+        -acquireEntityLock(String entityId) boolean
+    }
+
+    class StateStore {
+        <<interface>>
+        +saveSnapshot(String taskId, StateSnapshot snapshot) void
+        +loadSnapshot(String taskId) StateSnapshot
+        +deleteSnapshot(String taskId) void
+    }
+
+    Session "1" *-- "N" Task : contains
+    Task "1" --> "1" Agent : dispatched to
+    Task "1" --> "0..1" Workflow : runs
+    Agent "1" *-- "N" Skill : owns
+    Skill <|.. ApiSkill
+    Skill <|.. ViewSkill
+    Skill <|.. AsyncSkill
+    Skill <|.. MacroSkill
+    MacroSkill "1" --> "1" Workflow : invokes
+    Workflow "1" *-- "N" Node : contains
+    Workflow "1" *-- "1" Blackboard : uses
+    ToolExecutor "1" --> "N" Skill : executes
+    Router "1" --> "N" Agent : dispatches to
+    Router "1" --> "N" Workflow : dispatches to

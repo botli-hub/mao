@@ -1,0 +1,43 @@
+graph TD
+    A["🔐 工具调用请求"] --> B{"请求来源类型"}
+
+    B -->|"C端用户触发"| C["用户敏感操作鉴权"]
+    B -->|"Cron 定时任务触发"| D["Cron 离线鉴权"]
+    B -->|"微服务内部调用"| E["AK/SK 内部互信"]
+
+    C --> C1["从 IAM 获取 OAuth2 Refresh Token\n(托管限定 Scope)"]
+    C1 --> C2["动态换取 5min 短期 Access_Token"]
+    C2 --> C3{"IAM 是否已吊销权限?"}
+    C3 -->|"否"| PII
+    C3 -->|"是"| C4["❌ 强杀任务\n标记为 Failed_Auth_Revoked"]
+
+    D --> D1{"操作是否涉及高危 API?"}
+    D1 -->|"否"| D2["使用限定 Scope 的 OAuth2 Token 执行"]
+    D1 -->|"是"| D3["🚫 禁止直接执行\n自动降级生成审批单\n转交人工审批"]
+    D2 --> PII
+
+    E --> E1["注入 X-Impersonate-User Header\n(模拟真实操作人信息)"]
+    E1 --> PII
+
+    PII["🛡️ PII 数据脱敏拦截器\n(工具执行器与 LLM 通信层)"] --> PII1
+    PII1["掩码真实手机号/身份证\n如: 188xxxx → PHONE_MASKED_01"] --> LLM
+
+    LLM["🤖 大模型推演\n(仅接触脱敏后的数据)"] --> PII2
+    PII2["网关还原脱敏数据\n(PHONE_MASKED_01 → 188xxxx)"] --> Execute
+
+    Execute["✅ 执行实际 API 调用"] --> Idempotency
+
+    Idempotency{"🔒 幂等性检查\n(Task_ID + Card_Action_ID)"} -->|"首次请求"| EntityLock
+    Idempotency -->|"重复请求"| Reject["🚫 网关层直接丢弃\n(防双花风险)"]
+
+    EntityLock{"🔑 分布式实体锁检查\n(Redis 互斥锁)"} -->|"获取锁成功"| Success
+    EntityLock -->|"实体已被锁定"| LockFail["❌ 拦截报错\n(防数据覆写死锁)"]
+
+    Success["✅ 执行成功\n释放实体锁"]
+
+    style C4 fill:#fef2f2,stroke:#dc2626,color:#7f1d1d
+    style D3 fill:#fef9c3,stroke:#ca8a04,color:#713f12
+    style Reject fill:#fef2f2,stroke:#dc2626,color:#7f1d1d
+    style LockFail fill:#fef2f2,stroke:#dc2626,color:#7f1d1d
+    style PII fill:#f0fdf4,stroke:#16a34a,color:#14532d
+    style Success fill:#dcfce7,stroke:#16a34a,color:#14532d
