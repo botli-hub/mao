@@ -19,6 +19,12 @@
 | **响应格式** | 统一返回 `{"code": 200, "message": "Success", "data": {}}` |
 | **分页格式** | 分页响应统一包含 `page_info: {total, current_page, has_more}` |
 
+#### 8.1.1 接口契约唯一源头 (Single Source of Truth)
+
+- 本文档 (`design/04_api/api_reference.md`) 是 MAO 平台 **API 契约唯一源头**。路径、请求/响应结构、枚举、鉴权头、错误码均以本文档为准。
+- 其他设计文档（如 `03_data_model/data_model.md`、`06_database/schema.sql`）中的接口相关描述仅用于实现说明，不得定义与本文档冲突的独立契约。
+- 若发生差异，必须先更新本文档，再同步更新其他文档。
+
 ### 8.2 C 端交互核心层 (User Workspace)
 
 #### 8.2.1 获取最近会话列表
@@ -152,7 +158,7 @@ POST /chat/action/execute
 
 > `next_state` 枚举值：`SUSPENDED`（异步挂起，等待外部回调）、`SYNC_COMPLETED`（同步完成，`sync_result` 字段包含业务结果）。
 
-#### 8.2.5 拉取离线消息信笱
+#### 8.2.5 拉取离线消息信箱
 
 ```
 GET /chat/offline-inbox
@@ -223,7 +229,7 @@ POST /callbacks/webhook/unified
 GET /admin/skills
 ```
 
-**Query 参数**：`page=1`, `size=10`, `type=ASYNC_SKILL`
+**Query 参数**：`page=1`, `size=10`, `type=ASYNC`
 
 **响应示例**：
 ```json
@@ -238,7 +244,7 @@ GET /admin/skills/{skill_id}
 
 **响应示例**：
 ```json
-{ "code": 200, "data": { "name": "SubmitOAApproval", "type": "ASYNC_SKILL", "input_schema": {...}, "output_schema": {...} } }
+{ "code": 200, "data": { "name": "SubmitOAApproval", "type": "ASYNC", "input_schema": {...}, "output_schema": {...} } }
 ```
 
 #### 8.4.3 注册原子技能
@@ -252,7 +258,7 @@ POST /admin/skills
 | 参数名 | 类型 | 必填 | 说明 |
 |---|---|---|---|
 | `name` | `string` | 是 | 技能名称 |
-| `type` | `string` | 是 | 技能类型：`API_SKILL`、`VIEW_SKILL`、`ASYNC_SKILL`、`MACRO_SKILL` |
+| `type` | `string` | 是 | 技能类型：`API`、`VIEW`、`ASYNC`、`MACRO` |
 | `execution_config` | `object` | 是 | 执行配置，包含 endpoint、auth_type |
 | `mao_control_meta` | `object` | 否 | MAO 控制元数据，异步技能必填 |
 | `input_schema` | `object` | 是 | 遵循 JSON Schema Draft-07 标准 |
@@ -262,7 +268,7 @@ POST /admin/skills
 ```json
 {
   "name": "SubmitOAApproval", 
-  "type": "ASYNC_SKILL",
+  "type": "ASYNC",
   "execution_config": { "endpoint": "https://oa.corp.com/api", "auth_type": "SYSTEM_AK_SK" },
   "mao_control_meta": { "x_mao_suspend": true, "ttl_seconds": 259200, "callback_expect": "WEBHOOK" },
   "input_schema": { "type": "object", "properties": { "amount": {"type": "number"} } },
