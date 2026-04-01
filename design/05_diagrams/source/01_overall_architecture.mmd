@@ -1,59 +1,78 @@
 graph TB
-    subgraph ClientLayer["🖥️ 客户端体验层 (Client Layer)"]
-        C_WS["C端融合工作站\n(LUI + GUI)"]
-        B_MC["B端管理控制台\n(Management Console)"]
+    subgraph ClientLayer["客户端体验层 (L1)"]
+        WebClient["Web 工作站\n(React + SSE/WS)"]
+        FeishuBot["飞书机器人\n(Webhook 事件驱动)"]
+        AdminConsole["B 端管理控制台\n(React + REST)"]
     end
 
-    subgraph GatewayLayer["🔀 统一接入网关层 (Gateway Layer)"]
-        BFF["BFF API 网关\n(WS/HTTP/SSE)"]
+    subgraph GatewayLayer["统一接入网关层 (L2)"]
+        BFF["BFF API 网关\n(HTTP / SSE / WebSocket)"]
         EventGW["统一事件网关\n(Webhook / Kafka MQ)"]
+        subgraph ChannelAdapter["渠道适配层 (Channel Adapter)"]
+            WebAdapter["Web 适配器\n(SSE/WS 推送)"]
+            FeishuAdapter["飞书适配器\n(OpenAPI 下发 / Card 翻译)"]
+        end
     end
 
-    subgraph ControlPlane["🧠 调度控制面 (Control Plane)"]
-        Router["Router 路由大脑\n(Intent Dispatch)"]
-        SessionMgr["Session/Task\n并发管理器"]
-        StateDB["StateDB\n(Redis + MySQL)"]
+    subgraph ControlPlane["调度控制面 (L3 · 无状态)"]
+        Router["Router 路由大脑\n(意图解析 / 消歧 / 分发)"]
+        SessionMgr["Session/Task 管理器\n(1:N 并发管理)"]
+        StateDB["StateDB\n(Redis: 快照 | MySQL: 元数据)"]
     end
 
-    subgraph ExecutionPlane["⚙️ 智能执行面 (Execution Plane)"]
-        ReactRunner["ReAct Runner\n(Agent 引擎)"]
-        DAGRunner["DAG Runner\n(画布引擎)"]
-        Blackboard["共享黑板\n(Typed Blackboard)"]
-        ToolExecutor["工具执行器\n(Tool Executor)"]
+    subgraph ExecutionPlane["智能执行面 (L4 · 无状态 Worker 池)"]
+        ReactRunner["ReAct Runner\n(串行 / 并行 / 熔断)"]
+        DAGRunner["DAG Runner\n(SOP 画布执行)"]
+        Blackboard["强类型共享黑板\n(外置持久化 KV)"]
+        ToolExec["工具执行器\n(多态路由 / PII 脱敏 / 幂等)"]
     end
 
-    subgraph AssetLayer["📦 资产与中枢层 (Asset Layer)"]
-        SkillRegistry["技能注册中心\n(Skill Registry)"]
-        RAG["RAG 向量知识库\n(Vector DB)"]
+    subgraph AssetLayer["资产与中枢层 (L5)"]
+        SkillRegistry["技能注册中心\n(API / VIEW / ASYNC / MACRO)"]
+        RAG["RAG 向量知识库\n(Milvus / Qdrant)"]
     end
 
-    subgraph ExternalLayer["🌐 外部生态层 (External Layer)"]
-        BizSvc["核心业务微服务\n(秒级返回)"]
-        OASvc["OA 审批系统\n(长程依赖)"]
-        Kafka["Kafka 消息队列\n(异步事件)"]
+    subgraph ExternalLayer["外部生态层 (L6)"]
+        BizServices["业务微服务\n(营销 / 风控 / 财务)"]
+        OASystem["OA 审批系统"]
+        Kafka["Kafka MQ\n(异步事件总线)"]
     end
 
-    C_WS <-->|"WebSocket / HTTP"| BFF
-    B_MC <-->|"HTTP REST"| BFF
-    BFF <--> Router
-    BFF <--> SessionMgr
-    Router --> ReactRunner
-    Router --> DAGRunner
+    WebClient -->|"HTTP / SSE / WS"| BFF
+    FeishuBot -->|"Webhook POST"| EventGW
+    AdminConsole -->|"REST"| BFF
+
+    BFF --> WebAdapter
+    EventGW --> FeishuAdapter
+    WebAdapter --> Router
+    FeishuAdapter --> Router
+
+    Router --> SessionMgr
     SessionMgr <--> StateDB
-    ReactRunner <--> Blackboard
-    DAGRunner <--> Blackboard
-    ReactRunner --> ToolExecutor
-    DAGRunner --> ToolExecutor
-    ToolExecutor --> SkillRegistry
-    ToolExecutor --> RAG
-    SkillRegistry --> BizSvc
-    SkillRegistry --> OASvc
-    OASvc -->|"Webhook/MQ 回调"| EventGW
-    Kafka -->|"事件订阅"| EventGW
-    EventGW --> SessionMgr
+    SessionMgr --> ReactRunner
+    SessionMgr --> DAGRunner
+
+    ReactRunner <-->|"读写快照 Append-only"| StateDB
+    DAGRunner <-->|"读写黑板 外置持久化"| Blackboard
+    Blackboard <-->|"持久化"| StateDB
+    ReactRunner --> ToolExec
+    DAGRunner --> ToolExec
+
+    ToolExec --> SkillRegistry
+    ToolExec --> RAG
+    SkillRegistry --> BizServices
+    SkillRegistry --> OASystem
+    SkillRegistry --> Kafka
+
+    OASystem -->|"审批回调"| EventGW
+    Kafka -->|"条件触发事件"| EventGW
+
+    ReactRunner -->|"OmniMessage 下发"| ChannelAdapter
+    DAGRunner -->|"OmniMessage 下发"| ChannelAdapter
 
     style ClientLayer fill:#e0f2fe,stroke:#0284c7,color:#0c4a6e
     style GatewayLayer fill:#f0fdf4,stroke:#16a34a,color:#14532d
+    style ChannelAdapter fill:#dcfce7,stroke:#16a34a,color:#14532d
     style ControlPlane fill:#fef9c3,stroke:#ca8a04,color:#713f12
     style ExecutionPlane fill:#fdf4ff,stroke:#9333ea,color:#581c87
     style AssetLayer fill:#fff7ed,stroke:#ea580c,color:#7c2d12

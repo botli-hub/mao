@@ -1,0 +1,54 @@
+sequenceDiagram
+    autonumber
+    participant User as 用户 (任意渠道)
+    participant CA as 渠道适配层
+    participant SessionMgr as Session/Task 管理器
+    participant Worker1 as Worker 实例 A<br/>(无状态)
+    participant StateDB as StateDB<br/>(Redis Append-only)
+    participant MySQL as MySQL<br/>(任务元数据)
+    participant Worker2 as Worker 实例 B<br/>(无状态)
+    participant OA as OA 审批系统
+
+    Note over User,OA: 阶段一：任务发起与执行
+
+    User->>CA: 发送消息（Web SSE / 飞书 Webhook）
+    CA->>SessionMgr: 创建 Task，分配 Worker A
+    SessionMgr->>MySQL: INSERT mao_task (task_id, status=RUNNING)
+    SessionMgr->>Worker1: 分配执行上下文
+
+    loop ReAct 推演循环
+        Worker1->>Worker1: Thought → Action → Observation
+        Worker1->>StateDB: APPEND step_snapshot<br/>key: task:{task_id}:steps
+        Note right of StateDB: 每步追加写入，严禁<br/>UPDATE MySQL task 表
+    end
+
+    Note over User,OA: 阶段二：遭遇 ASYNC 技能，触发深冻结挂起
+
+    Worker1->>StateDB: SAVE blackboard_snapshot<br/>key: task:{task_id}:blackboard
+    Worker1->>StateDB: SAVE context_snapshot<br/>key: task:{task_id}:context
+    Worker1->>MySQL: UPDATE mao_task SET status=SUSPENDED,<br/>state_snapshot_key='task:{task_id}:*'
+    Worker1->>OA: 提交审批单
+    Note over Worker1: Worker A 线程立即销毁<br/>释放资源，无内存残留
+
+    Note over User,OA: 阶段三：外部回调唤醒（任意 Worker 均可恢复）
+
+    OA->>CA: Webhook 回调审批结果
+    CA->>SessionMgr: 查询 task_id，更新状态
+    SessionMgr->>MySQL: UPDATE mao_task SET status=RUNNING
+    SessionMgr->>Worker2: 分配全新 Worker B（与 A 无关）
+    Worker2->>StateDB: LOAD blackboard_snapshot
+    Worker2->>StateDB: LOAD context_snapshot
+    Note over Worker2: Worker B 从 StateDB 完整恢复<br/>执行现场，继续 ReAct 推演
+
+    loop 继续 ReAct 推演
+        Worker2->>Worker2: Thought → Action → Observation
+        Worker2->>StateDB: APPEND step_snapshot
+    end
+
+    Note over User,OA: 阶段四：任务完成，推送结果
+
+    Worker2->>CA: OmniMessage { type: TEXT, content: "审批通过，任务执行完成" }
+    CA->>User: 根据渠道类型下发消息
+    Worker2->>MySQL: UPDATE mao_task SET status=COMPLETED
+    Worker2->>StateDB: DEL task:{task_id}:* (清理快照)
+    Note over Worker2: Worker B 线程销毁

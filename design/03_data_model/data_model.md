@@ -59,7 +59,7 @@
 | `agent_id` | `VARCHAR(64)` | FK → mao_agent.agent_id | 承接的 Agent（与 workflow_id 二选一） |
 | `workflow_id` | `VARCHAR(64)` | FK → mao_workflow.workflow_id | 承接的 SOP 画布（与 agent_id 二选一） |
 | `status` | `VARCHAR(32)` | NOT NULL, DEFAULT 'PENDING' | 任务状态（见枚举定义） |
-| `state_snapshot` | `LONGTEXT` | | 深冻结时的任务状态序列化 JSON |
+| `state_snapshot_key` | `VARCHAR(128)` | INDEX | **StateDB 外置快照的 Key**，实际快照存储于 Redis/DynamoDB，严禁存入本表 |
 | `execution_version` | `VARCHAR(32)` | | 执行时绑定的 SOP 版本号（如 v1.0） |
 | `oa_ticket_id` | `VARCHAR(64)` | | 关联的 OA 审批单号 |
 | `idempotency_key` | `VARCHAR(128)` | UNIQUE | 幂等键：`{task_id}_{card_action_id}` |
@@ -157,15 +157,47 @@
 | `expired_at` | `DATETIME` | | 过期时间 |
 | `created_at` | `DATETIME` | NOT NULL | 创建时间 |
 
-#### 4.2.11 离线信箱表 `mao_offline_inbox`
+#### 4.2.11 渠道账号绑定表 `mao_channel_account`
+
+统一管理用户在各渠道的外部身份映射，支持飞书、钉钉、企业微信等第三方渠道的用户身份与系统内部用户的绑定。
+
+| 字段名 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| `id` | `BIGINT` | PK, AUTO_INCREMENT | 主键 |
+| `user_id` | `BIGINT` | FK → mao_user.id, INDEX | 系统内部用户 ID |
+| `channel_type` | `VARCHAR(32)` | NOT NULL | 渠道类型：`WEB` / `FEISHU` / `DINGTALK` / `WECOM` |
+| `external_user_id` | `VARCHAR(128)` | NOT NULL | 外部渠道的用户唯一标识（如飞书 OpenID） |
+| `external_app_id` | `VARCHAR(128)` | | 外部应用 ID（如飞书 App ID） |
+| `access_token` | `TEXT` | | 渠道访问凭证（加密存储） |
+| `token_expires_at` | `DATETIME` | | 凭证过期时间 |
+| `created_at` | `DATETIME` | NOT NULL | 创建时间 |
+| `updated_at` | `DATETIME` | NOT NULL | 更新时间 |
+
+#### 4.2.12 渠道会话映射表 `mao_channel_session`
+
+将外部渠道的会话标识（如飞书的 ChatID）与 MAO 内部 Session 进行映射，保证同一渠道的同一运营群组对话历史的连续性。
+
+| 字段名 | 类型 | 约束 | 说明 |
+|---|---|---|---|
+| `id` | `BIGINT` | PK, AUTO_INCREMENT | 主键 |
+| `session_id` | `VARCHAR(64)` | FK → mao_session.session_id | MAO 内部 Session ID |
+| `channel_type` | `VARCHAR(32)` | NOT NULL | 渠道类型 |
+| `external_chat_id` | `VARCHAR(256)` | NOT NULL | 外部渠道会话/群组 ID（如飞书 ChatID） |
+| `external_app_id` | `VARCHAR(128)` | NOT NULL | 外部应用 ID |
+| `created_at` | `DATETIME` | NOT NULL | 创建时间 |
+
+#### 4.2.13 离线信笱表 `mao_offline_inbox`
+
+用于存储用户离线期间产生的消息。渠道适配层在用户重新上线时，根据 `channel_type` 决定是通过 WebSocket 重连推送（Web）还是直接调用机器人接口发送（飞书）。
 
 | 字段名 | 类型 | 约束 | 说明 |
 |---|---|---|---|
 | `id` | `BIGINT` | PK, AUTO_INCREMENT | 主键 |
 | `user_id` | `BIGINT` | FK → mao_user.id, INDEX | 目标用户 |
 | `task_id` | `VARCHAR(64)` | FK → mao_task.task_id | 关联任务 |
+| `channel_type` | `VARCHAR(32)` | NOT NULL, DEFAULT 'WEB' | 目标渠道：`WEB` / `FEISHU` / `DINGTALK` / `WECOM` |
 | `message_content` | `TEXT` | NOT NULL | 消息文本内容 |
-| `card_schema` | `JSON` | | 消息卡片 Schema |
+| `card_schema` | `JSON` | | 消息卡片 Schema（渠道适配层负责根据渠道翻译格式） |
 | `status` | `VARCHAR(16)` | NOT NULL, DEFAULT 'UNREAD' | 状态：`UNREAD` / `READ` |
 | `created_at` | `DATETIME` | NOT NULL | 创建时间 |
 | `read_at` | `DATETIME` | | 阅读时间 |

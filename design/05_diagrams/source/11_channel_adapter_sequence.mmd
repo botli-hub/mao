@@ -1,0 +1,50 @@
+sequenceDiagram
+    autonumber
+    participant Feishu as 飞书机器人
+    participant Web as Web 工作站
+    participant CA as 渠道适配层<br/>(Channel Adapter)
+    participant BFF as BFF 网关
+    participant Router as Router 路由大脑
+    participant Worker as 无状态 Worker
+    participant StateDB as StateDB<br/>(Redis + MySQL)
+
+    Note over Feishu,StateDB: 入站路径：飞书用户发送消息
+
+    Feishu->>CA: POST /callbacks/channel/feishu<br/>{ open_id, chat_id, text }
+    CA->>CA: 1. 校验 X-Lark-Signature
+    CA->>CA: 2. 查 mao_channel_account 获取 user_id
+    CA->>CA: 3. 查 mao_channel_session 获取 session_id<br/>(不存在则自动创建)
+    CA->>Feishu: 立即返回 HTTP 200 (3s 内)
+    CA->>BFF: 转换为标准 OmniMessage<br/>POST /chat/completions (内部调用)
+
+    BFF->>Router: 分发意图
+    Router->>Worker: 分配无状态 Worker 执行
+    Worker->>StateDB: 加载任务快照 (若有)
+    Worker->>Worker: ReAct 推演...
+
+    Note over Worker,StateDB: 每步推演结束后 Append-only 写入 StateDB
+
+    Worker->>StateDB: 追加写入执行步骤快照
+
+    alt 需要用户确认 (VIEW 技能)
+        Worker->>CA: 输出标准 CardSchema<br/>{ message_type: CARD, card_schema: {...} }
+        Worker->>StateDB: 序列化状态快照，Worker 线程销毁
+        CA->>CA: 根据 channel_type 翻译卡片格式
+        CA->>Feishu: 调用飞书 OpenAPI 发送 Interactive Card
+        Feishu->>CA: 用户点击卡片按钮<br/>POST /callbacks/channel/feishu/card-action
+        CA->>BFF: 转换为 POST /chat/action/execute
+        BFF->>Worker: 分配新 Worker，从 StateDB 恢复快照
+        Worker->>StateDB: 加载状态快照，恢复执行现场
+    else 直接返回结果
+        Worker->>CA: 输出 OmniMessage { message_type: TEXT }
+        CA->>Feishu: 调用飞书 OpenAPI 发送文本消息
+    end
+
+    Note over Web,StateDB: 入站路径：Web 用户发送消息（对比参考）
+
+    Web->>BFF: POST /chat/completions (SSE)
+    BFF->>Router: 分发意图
+    Router->>Worker: 分配无状态 Worker 执行
+    Worker->>StateDB: 读写快照 (Append-only)
+    Worker->>CA: 输出 OmniMessage
+    CA->>Web: SSE event: message / action_card

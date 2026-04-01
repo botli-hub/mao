@@ -1,6 +1,6 @@
 # MAO 平台 — 全景 API 接口文档 (v9.0-PROD)
 
-> **版本**：V9.0-PROD | **更新日期**：2026-04
+> **版本**：V9.1-PROD | **更新日期**：2026-04 | **新增**：8.9 渠道适配层接口、8.10 统一消息下发规范、8.11 渠道类型枚举
 
 ---
 
@@ -641,3 +641,278 @@ POST /admin/audit/traces/{task_id}/retry
 ```
 
 ---
+
+
+### 8.9 渠道适配层 (Channel Adapter)
+
+本节定义多渠道接入相关的接口，包括飞书机器人 Webhook 接收、渠道账号绑定管理，以及统一的消息下发机制。
+
+---
+
+#### 8.9.1 飞书机器人 Webhook 接收入口
+
+```
+POST /callbacks/channel/feishu
+```
+
+**描述**：接收飞书开放平台推送的事件（用户发送消息、卡片回调等）。飞书要求此接口在 3 秒内返回 HTTP 200，否则会重试。渠道适配层收到事件后立即入队，异步处理。
+
+**安全验证**：飞书通过 `X-Lark-Signature` 和 `X-Lark-Request-Timestamp` 进行签名验证，适配层必须在处理前校验签名。
+
+**请求 Header**：
+
+| Header | 说明 |
+|---|---|
+| `X-Lark-Signature` | 飞书事件签名 |
+| `X-Lark-Request-Timestamp` | 请求时间戳 |
+| `X-Lark-Request-Nonce` | 随机字符串（防重放） |
+
+**请求体（飞书消息事件示例）**：
+```json
+{
+  "schema": "2.0",
+  "header": {
+    "event_id": "5e3702a84e847582be8db7fb73283c02",
+    "event_type": "im.message.receive_v1",
+    "app_id": "cli_9f3fc9489b001234"
+  },
+  "event": {
+    "sender": {
+      "sender_id": { "open_id": "ou_7d8a6e6df7621556ce0d21922b676706" }
+    },
+    "message": {
+      "message_id": "om_dc13264520392913993dd051dba21dcf",
+      "chat_id": "oc_5ad11d72b830411d72b836c20",
+      "message_type": "text",
+      "content": "{\"text\":\"帮我查一下五一活动的预算消耗\"}"
+    }
+  }
+}
+```
+
+**适配层处理逻辑**：
+
+1. 校验 `X-Lark-Signature` 签名，不合法则返回 HTTP 401。
+2. 通过 `open_id` 查询 `mao_channel_account` 表，获取对应的内部 `user_id`。
+3. 通过 `chat_id` 查询 `mao_channel_session` 表，获取或创建对应的 MAO `session_id`。
+4. 将事件转换为内部标准 `OmniMessage` 对象，调用 `/chat/completions` 核心逻辑。
+5. 立即返回 HTTP 200 空响应，异步处理并通过飞书 OpenAPI 回复结果。
+
+**响应**：
+```json
+{ "code": 0 }
+```
+
+---
+
+#### 8.9.2 飞书卡片回调接收入口
+
+```
+POST /callbacks/channel/feishu/card-action
+```
+
+**描述**：接收飞书交互式卡片的用户操作回调（如用户点击卡片上的"确认"按钮）。适配层将其转换为内部的 `/chat/action/execute` 调用，唤醒挂起的任务。
+
+**请求体（飞书卡片操作事件）**：
+```json
+{
+  "open_id": "ou_7d8a6e6df7621556ce0d21922b676706",
+  "action": {
+    "tag": "button",
+    "value": {
+      "card_action_id": "card_act_abc123",
+      "task_id": "task_xyz789",
+      "payload": { "budget": 20000, "confirmed": true }
+    }
+  }
+}
+```
+
+**适配层处理逻辑**：
+
+1. 校验飞书签名。
+2. 提取 `card_action_id` 和 `task_id`，转换为内部 `POST /chat/action/execute` 请求。
+3. 返回飞书要求的卡片更新响应（将卡片更新为只读确认状态）。
+
+**响应（飞书卡片更新格式）**：
+```json
+{
+  "toast": {
+    "type": "success",
+    "content": "已确认，任务正在执行中..."
+  },
+  "card": {
+    "config": { "update_multi": false }
+  }
+}
+```
+
+---
+
+#### 8.9.3 渠道账号绑定管理
+
+```
+POST /admin/channel-accounts/bind
+```
+
+**描述**：将外部渠道用户身份（如飞书 OpenID）与 MAO 系统用户绑定。
+
+**请求参数**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `user_id` | `number` | 是 | MAO 系统内部用户 ID |
+| `channel_type` | `string` | 是 | 渠道类型：`FEISHU` / `DINGTALK` / `WECOM` |
+| `external_user_id` | `string` | 是 | 外部渠道用户唯一标识（如飞书 OpenID） |
+| `external_app_id` | `string` | 是 | 外部应用 ID（如飞书 App ID） |
+
+**请求示例**：
+```json
+{
+  "user_id": 1001,
+  "channel_type": "FEISHU",
+  "external_user_id": "ou_7d8a6e6df7621556ce0d21922b676706",
+  "external_app_id": "cli_9f3fc9489b001234"
+}
+```
+
+**响应示例**：
+```json
+{
+  "code": 200,
+  "message": "绑定成功",
+  "data": { "binding_id": 55 }
+}
+```
+
+---
+
+```
+GET /admin/channel-accounts
+```
+
+**描述**：查询渠道账号绑定列表。
+
+**Query 参数**：`channel_type=FEISHU`, `page=1`, `size=20`
+
+---
+
+```
+DELETE /admin/channel-accounts/{id}
+```
+
+**描述**：解绑渠道账号。
+
+---
+
+#### 8.9.4 渠道会话映射管理
+
+```
+POST /admin/channel-sessions/bind
+```
+
+**描述**：将外部渠道会话（如飞书群 ChatID）与 MAO 内部 Session 绑定，用于运营群组场景。
+
+**请求参数**：
+
+| 参数名 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| `session_id` | `string` | 是 | MAO 内部 Session ID |
+| `channel_type` | `string` | 是 | 渠道类型 |
+| `external_chat_id` | `string` | 是 | 外部渠道会话/群组 ID |
+| `external_app_id` | `string` | 是 | 外部应用 ID |
+
+---
+
+### 8.10 统一消息下发规范 (Outbound Message Protocol)
+
+本节定义引擎向各渠道下发消息的内部标准协议，由渠道适配层负责翻译。
+
+#### 8.10.1 标准 OmniMessage 对象
+
+执行引擎输出的所有消息均遵循以下标准格式，由渠道适配层翻译为目标渠道格式：
+
+```json
+{
+  "session_id": "sess_001",
+  "task_id": "task_xyz789",
+  "channel_type": "FEISHU",
+  "message_type": "TEXT | CARD | STREAM_CHUNK | SYSTEM_NOTICE",
+  "content": {
+    "text": "任务执行完成，预算消耗率 87.3%",
+    "card_schema": null
+  },
+  "metadata": {
+    "is_final": true,
+    "card_action_id": null
+  }
+}
+```
+
+#### 8.10.2 渠道格式翻译规则
+
+| 内部 `message_type` | Web 端输出 | 飞书机器人输出 |
+|---|---|---|
+| `TEXT` | SSE `event: message` 流式推送 | 调用飞书 `im.message.create` 发送文本消息 |
+| `CARD` | SSE `event: action_card` + WebSocket 推送 | 调用飞书 `im.message.create` 发送 Interactive Card |
+| `STREAM_CHUNK` | SSE `event: message` 流式增量 | 飞书不支持流式，缓冲后一次性发送 |
+| `SYSTEM_NOTICE` | 聊天框顶部系统通知条 | 调用飞书 `im.message.create` 发送系统通知文本 |
+
+#### 8.10.3 飞书 Interactive Card 模板规范
+
+当 `message_type = CARD` 时，适配层将内部 `card_schema` 翻译为飞书标准卡片格式：
+
+```json
+{
+  "msg_type": "interactive",
+  "card": {
+    "config": { "wide_screen_mode": true },
+    "header": {
+      "title": { "tag": "plain_text", "content": "任务参数确认" },
+      "template": "blue"
+    },
+    "elements": [
+      {
+        "tag": "div",
+        "text": { "tag": "lark_md", "content": "**活动名称**：五一母婴线\n**总预算**：20,000 元" }
+      },
+      {
+        "tag": "action",
+        "actions": [
+          {
+            "tag": "button",
+            "text": { "tag": "plain_text", "content": "确认执行" },
+            "type": "primary",
+            "value": {
+              "card_action_id": "card_act_abc123",
+              "task_id": "task_xyz789",
+              "action": "CONFIRM"
+            }
+          },
+          {
+            "tag": "button",
+            "text": { "tag": "plain_text", "content": "取消" },
+            "type": "default",
+            "value": {
+              "card_action_id": "card_act_abc123",
+              "task_id": "task_xyz789",
+              "action": "CANCEL"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+---
+
+### 8.11 渠道类型枚举 (ChannelType)
+
+| 枚举值 | 说明 | 入站协议 | 出站协议 |
+|---|---|---|---|
+| `WEB` | Web 端工作站 | HTTP POST + SSE | SSE / WebSocket |
+| `FEISHU` | 飞书机器人 | Webhook HTTP POST | 飞书 OpenAPI (HTTP) |
+| `DINGTALK` | 钉钉机器人 | Webhook HTTP POST | 钉钉 OpenAPI (HTTP) |
+| `WECOM` | 企业微信机器人 | Webhook HTTP POST | 企业微信 API (HTTP) |

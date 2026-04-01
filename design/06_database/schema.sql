@@ -196,3 +196,53 @@ CREATE TABLE `mao_offline_inbox` (
   CONSTRAINT `fk_inbox_user` FOREIGN KEY (`user_id`) REFERENCES `mao_user` (`id`),
   CONSTRAINT `fk_inbox_task` FOREIGN KEY (`task_id`) REFERENCES `mao_task` (`task_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='离线信箱表';
+
+-- ============================================================
+-- v9.1 新增：渠道适配层相关表
+-- ============================================================
+
+-- 渠道账号绑定表：统一管理用户在各渠道的外部身份映射
+CREATE TABLE `mao_channel_account` (
+  `id`                BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `user_id`           BIGINT        NOT NULL COMMENT '系统内部用户 ID',
+  `channel_type`      VARCHAR(32)   NOT NULL COMMENT '渠道类型: WEB / FEISHU / DINGTALK / WECOM',
+  `external_user_id`  VARCHAR(128)  NOT NULL COMMENT '外部渠道用户唯一标识（如飞书 OpenID）',
+  `external_app_id`   VARCHAR(128)  DEFAULT NULL COMMENT '外部应用 ID（如飞书 App ID）',
+  `access_token`      TEXT          DEFAULT NULL COMMENT '渠道访问凭证（AES-256 加密存储）',
+  `token_expires_at`  DATETIME      DEFAULT NULL COMMENT '凭证过期时间',
+  `created_at`        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at`        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_channel_external_user` (`channel_type`, `external_user_id`, `external_app_id`),
+  KEY `idx_user_id` (`user_id`),
+  CONSTRAINT `fk_channel_account_user` FOREIGN KEY (`user_id`) REFERENCES `mao_user` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='渠道账号绑定表';
+
+-- 渠道会话映射表：将外部渠道会话与 MAO 内部 Session 映射
+CREATE TABLE `mao_channel_session` (
+  `id`               BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `session_id`       VARCHAR(64)   NOT NULL COMMENT 'MAO 内部 Session ID',
+  `channel_type`     VARCHAR(32)   NOT NULL COMMENT '渠道类型',
+  `external_chat_id` VARCHAR(256)  NOT NULL COMMENT '外部渠道会话/群组 ID（如飞书 ChatID）',
+  `external_app_id`  VARCHAR(128)  NOT NULL COMMENT '外部应用 ID',
+  `created_at`       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_channel_chat` (`channel_type`, `external_chat_id`, `external_app_id`),
+  KEY `idx_session_id` (`session_id`),
+  CONSTRAINT `fk_channel_session_session` FOREIGN KEY (`session_id`) REFERENCES `mao_session` (`session_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='渠道会话映射表';
+
+-- ============================================================
+-- v9.1 变更：mao_task 表 state_snapshot 字段重构
+-- 原字段 state_snapshot LONGTEXT 已废弃，改为 state_snapshot_key
+-- 实际快照存储于 Redis/DynamoDB，MySQL 仅存储 Key 引用
+-- ============================================================
+-- 注意：如果在已有数据库上执行，需先执行以下迁移语句：
+-- ALTER TABLE `mao_task` DROP COLUMN `state_snapshot`;
+-- ALTER TABLE `mao_task` ADD COLUMN `state_snapshot_key` VARCHAR(128) DEFAULT NULL COMMENT 'StateDB 外置快照的 Key，实际快照存储于 Redis/DynamoDB' AFTER `status`;
+-- ALTER TABLE `mao_task` ADD INDEX `idx_state_snapshot_key` (`state_snapshot_key`);
+
+-- ============================================================
+-- v9.1 变更：mao_offline_inbox 表新增 channel_type 字段
+-- ============================================================
+-- ALTER TABLE `mao_offline_inbox` ADD COLUMN `channel_type` VARCHAR(32) NOT NULL DEFAULT 'WEB' COMMENT '目标渠道: WEB / FEISHU / DINGTALK / WECOM' AFTER `task_id`;
