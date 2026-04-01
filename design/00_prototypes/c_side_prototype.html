@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MAO - 营销超级助理 (C端工作站)</title>
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Lucide 图标库 -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#4f46e5', // indigo-600
+                        'primary-hover': '#4338ca', // indigo-700
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 自定义滚动条美化 */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* 打字机动画 */
+        .typing-indicator span {
+            display: inline-block; width: 4px; height: 4px; background-color: #94a3b8;
+            border-radius: 50%; margin: 0 2px; animation: bounce 1.4s infinite ease-in-out both;
+        }
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        /* 元素入场动画 */
+        .card-enter { animation: slideInUp 0.4s ease-out forwards; }
+        @keyframes slideInUp {
+            from { opacity: 0; transform: translateY(15px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Toast 动画 */
+        .toast-enter { animation: slideInRight 0.3s ease-out forwards; }
+        .toast-leave { animation: fadeOutRight 0.3s ease-in forwards; }
+        @keyframes slideInRight {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes fadeOutRight {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+
+        /* 平滑移除过渡 */
+        .smooth-remove {
+            transition: all 0.3s ease;
+            opacity: 0 !important;
+            transform: scale(0.95);
+            height: 0 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            overflow: hidden;
+            border: none !important;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 h-screen flex overflow-hidden text-gray-800 font-sans relative">
+
+    <!-- 全局 Toast 容器 -->
+    <div id="toast-container" class="fixed top-20 right-4 z-50 flex flex-col space-y-3 pointer-events-none"></div>
+
+    <!-- 左侧边栏 (Sidebar) -->
+    <aside class="w-72 bg-white border-r border-gray-200 flex flex-col shadow-sm z-20 hidden md:flex">
+        <!-- Logo 区域 -->
+        <div class="h-16 flex items-center px-6 border-b border-gray-100 flex-shrink-0">
+            <div class="bg-primary text-white p-1.5 rounded-lg mr-3 shadow-sm shadow-indigo-200">
+                <i data-lucide="bot" class="w-5 h-5"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg leading-tight tracking-tight text-gray-900">MAO Copilot</h1>
+                <p class="text-xs text-gray-500">我的 AI 工作站</p>
+            </div>
+        </div>
+
+        <!-- 会话历史与托管任务 -->
+        <div class="flex-1 overflow-y-auto p-4 space-y-6">
+            <!-- 最近会话 -->
+            <div>
+                <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 px-2 flex items-center justify-between">
+                    <span>最近会话</span>
+                    <button onclick="showToast('正在发起新会话...', 'info')" class="text-gray-400 hover:text-indigo-600 transition-colors"><i data-lucide="plus" class="w-3.5 h-3.5"></i></button>
+                </h2>
+                <ul class="space-y-1">
+                    <li>
+                        <a href="#" class="flex items-center px-3 py-2 text-sm bg-indigo-50 text-indigo-700 rounded-lg font-medium transition-colors">
+                            <i data-lucide="message-square" class="w-4 h-4 mr-2 text-indigo-500"></i>
+                            <span class="truncate">五一母婴线促活策划</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="flex items-center px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors group">
+                            <i data-lucide="message-square" class="w-4 h-4 mr-2 text-gray-400 group-hover:text-gray-500 transition-colors"></i>
+                            <span class="truncate">排查：新人发奖失败异常</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="flex items-center px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg transition-colors group">
+                            <i data-lucide="message-square" class="w-4 h-4 mr-2 text-gray-400 group-hover:text-gray-500 transition-colors"></i>
+                            <span class="truncate">昨日各品类大盘总结</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- AI 托管大盘 (个人级 Scheduler) -->
+            <div>
+                <h2 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 px-2 flex items-center justify-between">
+                    <span>我的后台托管任务</span>
+                    <span class="bg-indigo-100 text-indigo-700 text-[10px] px-1.5 py-0.5 rounded-full font-semibold border border-indigo-200" id="sidebar-task-count">2 运行中</span>
+                </h2>
+                <ul class="space-y-3">
+                    <!-- 托管任务 1 -->
+                    <li class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all relative overflow-hidden group">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-green-500" id="task-status-bar-1"></div>
+                        <div class="flex justify-between items-start mb-1">
+                            <span class="text-sm font-semibold text-gray-800 truncate pr-2 group-hover:text-indigo-600 transition-colors">双十一预算盯盘雷达</span>
+                            <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse mt-1.5 flex-shrink-0" id="task-pulse-1"></div>
+                        </div>
+                        <p class="text-xs text-gray-500 mb-2">条件触发：消耗超 80% 告警</p>
+                        <div class="flex items-center justify-between mt-3 pt-2 border-t border-gray-100">
+                            <span class="text-[10px] text-gray-400 font-medium">存活期: 剩余 5 天</span>
+                            <div class="flex space-x-1.5">
+                                <button onclick="toggleTaskStatus(this, 1)" class="p-1 text-gray-400 hover:text-amber-500 bg-gray-50 hover:bg-amber-50 rounded transition-colors" title="暂停/恢复任务"><i data-lucide="pause" class="w-3.5 h-3.5" id="task-icon-1"></i></button>
+                                <button onclick="removeTask(this)" class="p-1 text-gray-400 hover:text-red-500 bg-gray-50 hover:bg-red-50 rounded transition-colors" title="结束并移除任务"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                            </div>
+                        </div>
+                    </li>
+                    <!-- 托管任务 2 -->
+                    <li class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all relative overflow-hidden group">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-green-500" id="task-status-bar-2"></div>
+                        <div class="flex justify-between items-start mb-1">
+                            <span class="text-sm font-semibold text-gray-800 truncate pr-2 group-hover:text-indigo-600 transition-colors">每日转化率早报</span>
+                            <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse mt-1.5 flex-shrink-0" id="task-pulse-2"></div>
+                        </div>
+                        <p class="text-xs text-gray-500 mb-2">定时触发：每天 10:00 (Jitter)</p>
+                        <div class="flex items-center justify-between mt-3 pt-2 border-t border-gray-100">
+                            <span class="text-[10px] text-gray-400 font-medium flex items-center">
+                                剩余 1 天 <span class="bg-red-100 text-red-600 border border-red-200 px-1 py-0.5 rounded ml-1 text-[9px] cursor-pointer" onclick="showToast('已为您将任务续期 7 天', 'success')">即将过期</span>
+                            </span>
+                            <div class="flex space-x-1.5">
+                                <button onclick="toggleTaskStatus(this, 2)" class="p-1 text-gray-400 hover:text-amber-500 bg-gray-50 hover:bg-amber-50 rounded transition-colors" title="暂停/恢复任务"><i data-lucide="pause" class="w-3.5 h-3.5" id="task-icon-2"></i></button>
+                                <button onclick="removeTask(this)" class="p-1 text-gray-400 hover:text-red-500 bg-gray-50 hover:bg-red-50 rounded transition-colors" title="结束并移除任务"><i data-lucide="trash-2" class="w-3.5 h-3.5"></i></button>
+                            </div>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- 用户信息底栏 -->
+        <div class="p-4 border-t border-gray-200 bg-gray-50/50 flex items-center flex-shrink-0">
+            <img src="https://ui-avatars.com/api/?name=Op&background=e0e7ff&color=3730a3" alt="User" class="w-9 h-9 rounded-full mr-3 ring-2 ring-white shadow-sm">
+            <div class="flex-1 min-w-0">
+                <p class="text-sm font-bold text-gray-900 truncate">林运营 (Lin)</p>
+                <p class="text-xs text-gray-500 truncate font-medium">母婴业务线 | <span class="text-indigo-600">L3 权限</span></p>
+            </div>
+            <button onclick="showToast('打开个人偏好设置面板', 'info')" class="text-gray-400 hover:text-indigo-600 bg-white p-1.5 rounded-md border border-gray-200 shadow-sm transition-colors"><i data-lucide="settings-2" class="w-4 h-4"></i></button>
+        </div>
+    </aside>
+
+    <!-- 主对话区域 (Main Chat Area) -->
+    <main class="flex-1 flex flex-col bg-white relative z-10 shadow-[-10px_0_15px_-3px_rgba(0,0,0,0.05)]">
+        
+        <!-- 顶栏 (毛玻璃效果) -->
+        <header class="h-16 flex items-center justify-between px-6 border-b border-gray-200 bg-white/80 backdrop-blur-md z-30 absolute top-0 w-full transition-all">
+            <div class="flex items-center">
+                <button class="md:hidden mr-4 text-gray-500 hover:text-gray-700">
+                    <i data-lucide="menu" class="w-6 h-6"></i>
+                </button>
+                <div class="flex flex-col">
+                    <h2 class="text-base font-bold text-gray-800 tracking-tight">五一母婴线促活策划</h2>
+                    <div class="flex items-center mt-0.5">
+                        <span class="w-1.5 h-1.5 rounded-full bg-green-500 mr-1.5 animate-pulse shadow-[0_0_5px_rgba(34,197,94,0.6)]"></span>
+                        <span class="text-[10px] font-medium text-gray-500 uppercase tracking-wide">Router 调度大脑在线</span>
+                    </div>
+                </div>
+            </div>
+            <div class="flex space-x-2">
+                <button onclick="showToast('已清空当前上下文，开启全新对话', 'success')" class="flex items-center px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50 hover:text-indigo-600 transition-colors shadow-sm font-medium">
+                    <i data-lucide="rotate-ccw" class="w-4 h-4 mr-1.5"></i> 清空重置
+                </button>
+                <button onclick="showToast('正在生成并下载对话报告文档...', 'info')" class="flex items-center px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50 hover:text-indigo-600 transition-colors shadow-sm font-medium">
+                    <i data-lucide="download-cloud" class="w-4 h-4 mr-1.5"></i> 导出记录
+                </button>
+            </div>
+        </header>
+
+        <!-- 聊天记录滚动区 -->
+        <div id="chat-container" class="flex-1 overflow-y-auto px-4 md:px-12 pt-24 pb-32 space-y-8 scroll-smooth bg-slate-50/50">
+            
+            <!-- 日期分割线 -->
+            <div class="flex justify-center my-4">
+                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest bg-gray-100 px-3 py-1 rounded-full">Today, 10:24 AM</span>
+            </div>
+
+            <!-- 用户消息 -->
+            <div class="flex flex-row-reverse items-start group">
+                <img src="https://ui-avatars.com/api/?name=Op&background=e0e7ff&color=3730a3" alt="User" class="w-9 h-9 rounded-full ml-4 flex-shrink-0 shadow-sm ring-2 ring-white">
+                <div class="max-w-[75%] bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-5 py-3.5 shadow-md group-hover:shadow-lg transition-shadow">
+                    <p class="text-sm leading-relaxed">帮我建一个针对母婴线新客的促活任务，发 10 元无门槛券，总预算两万。记得加一下常规的风控限制，防一下黑产羊毛党。</p>
+                </div>
+            </div>
+
+            <!-- AI 消息 (流式输出模拟 + LUI GUI 融合卡片) -->
+            <div class="flex items-start group">
+                <div class="bg-white border border-gray-200 text-primary p-2 rounded-xl mr-4 flex-shrink-0 shadow-sm mt-1 ring-1 ring-black/5 group-hover:shadow-md transition-shadow">
+                    <i data-lucide="bot" class="w-5 h-5"></i>
+                </div>
+                <div class="max-w-[85%] md:max-w-[75%]">
+                    <!-- 文本回复 -->
+                    <div class="text-gray-800 text-sm leading-relaxed mb-4">
+                        好的，没问题。底层路由已唤醒 <code>[任务管理 Agent]</code> 和 <code>[风控策略 Agent]</code> 为您进行协同配置。<br><br>
+                        根据您的诉求，我生成了【母婴新客促活】的系统配置草案，并自动绑定了基础的防刷拦截规则（基于历史母婴线高危行为特征）。请您核对以下参数，确认无误后可一键提交至 OA 审批流：
+                    </div>
+                    
+                    <!-- GUI 融合交互卡片 (核心亮点) -->
+                    <div id="config-card" class="bg-white border border-gray-200 rounded-2xl shadow-lg shadow-indigo-100/50 overflow-hidden card-enter ring-1 ring-black/5">
+                        <!-- 卡片头部 -->
+                        <div class="bg-gradient-to-r from-gray-50 to-white border-b border-gray-200 px-5 py-3.5 flex justify-between items-center">
+                            <div class="flex items-center text-gray-800 font-bold text-sm tracking-tight">
+                                <div class="bg-indigo-100 p-1.5 rounded mr-2"><i data-lucide="clipboard-list" class="w-4 h-4 text-indigo-600"></i></div>
+                                任务配置确认单
+                            </div>
+                            <span class="text-[10px] font-bold bg-amber-50 text-amber-600 px-2.5 py-1 rounded-md border border-amber-200 tracking-wide uppercase">待人工确认</span>
+                        </div>
+                        
+                        <!-- 卡片表单区 -->
+                        <div class="p-5 space-y-5">
+                            <!-- 字段 1 -->
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium text-gray-500 w-1/3">任务名称</span>
+                                <input type="text" value="母婴新客首单促活_202405" class="text-sm font-medium text-gray-800 border border-gray-300 rounded-lg px-3 py-2 w-2/3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all shadow-sm bg-gray-50/50">
+                            </div>
+                            <!-- 字段 2 -->
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium text-gray-500 w-1/3 flex items-center">目标客群 <i data-lucide="info" class="w-3.5 h-3.5 ml-1 text-gray-400 cursor-help" title="基于自然语言解析出的底层画像标签"></i></span>
+                                <select class="text-sm font-medium text-gray-800 border border-gray-300 rounded-lg px-3 py-2 w-2/3 bg-white focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm cursor-pointer hover:border-indigo-300 transition-colors">
+                                    <option>画像交叉: is_maternal & is_new</option>
+                                    <option>自定义人群包上传</option>
+                                    <option>全量活跃用户</option>
+                                </select>
+                            </div>
+                            <!-- 字段 3 -->
+                            <div class="flex items-center justify-between">
+                                <span class="text-sm font-medium text-gray-500 w-1/3">发奖总预算</span>
+                                <div class="relative w-2/3">
+                                    <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500 font-bold text-sm">¥</span>
+                                    <input type="number" id="budget-input" value="20000" class="text-sm font-bold border border-gray-300 rounded-lg pl-7 pr-3 py-2 w-full focus:ring-2 focus:ring-indigo-500 outline-none text-indigo-700 shadow-sm bg-indigo-50/30 transition-all hover:border-indigo-300">
+                                </div>
+                            </div>
+                            
+                            <div class="border-t border-gray-100 border-dashed"></div>
+                            
+                            <!-- 风控拦截区 -->
+                            <div>
+                                <span class="text-sm font-bold text-gray-800 mb-3 block flex items-center">
+                                    <i data-lucide="shield-check" class="w-4.5 h-4.5 mr-1.5 text-emerald-500"></i>
+                                    AI 智能风控建议 (已自动阻断)
+                                </span>
+                                <div class="space-y-2.5 mt-2 bg-gray-50 p-3.5 rounded-xl border border-gray-200 shadow-inner">
+                                    <label class="flex items-center cursor-pointer group">
+                                        <input type="checkbox" checked class="w-4.5 h-4.5 text-indigo-600 bg-white border-gray-300 rounded focus:ring-indigo-500 focus:ring-2 cursor-pointer">
+                                        <span class="ml-3 text-sm font-medium text-gray-700 group-hover:text-indigo-700 transition-colors">单设备/单 IP 每日限参与 1 次 <span class="text-[10px] text-gray-400 font-normal ml-1">(防机刷)</span></span>
+                                    </label>
+                                    <label class="flex items-center cursor-pointer group">
+                                        <input type="checkbox" checked class="w-4.5 h-4.5 text-indigo-600 bg-white border-gray-300 rounded focus:ring-indigo-500 focus:ring-2 cursor-pointer">
+                                        <span class="ml-3 text-sm font-medium text-gray-700 group-hover:text-indigo-700 transition-colors">仅限 L2 及以上实名认证用户 <span class="text-[10px] text-gray-400 font-normal ml-1">(防羊毛小号)</span></span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- 影响面预估 -->
+                            <div class="bg-gradient-to-r from-blue-50 to-indigo-50/50 p-4 rounded-xl border border-blue-100 flex items-start shadow-sm">
+                                <div class="bg-white p-1.5 rounded-lg shadow-sm border border-blue-100 mr-3 mt-0.5">
+                                    <i data-lucide="pie-chart" class="w-4 h-4 text-indigo-600"></i>
+                                </div>
+                                <div>
+                                    <p class="text-xs font-bold text-indigo-900 tracking-wide">实时预估影响面 (Real-time Estimation)</p>
+                                    <p class="text-xs text-gray-600 mt-1.5 leading-relaxed">当前圈选条件预计覆盖 <strong class="text-gray-900 font-bold bg-white px-1 py-0.5 rounded border border-gray-200 mx-0.5">45,210</strong> 名活跃用户。按 ¥20,000 总预算计，预估可支撑约 <strong class="text-indigo-700 font-bold">4.4%</strong> 的核心转化率。</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 卡片底部操作区 -->
+                        <div id="card-actions" class="bg-gray-50/80 border-t border-gray-200 px-5 py-4 flex items-center justify-between">
+                            <span class="text-xs font-medium text-gray-400 flex items-center">
+                                <i data-lucide="lock" class="w-3 h-3 mr-1"></i> 操作已加密溯源
+                            </span>
+                            <div class="flex space-x-3">
+                                <button onclick="showToast('已取消该配置意图', 'info')" class="px-4 py-2 text-sm font-semibold text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500">
+                                    驳回重试
+                                </button>
+                                <button id="submit-btn" onclick="submitConfig()" class="px-5 py-2 text-sm font-bold text-white bg-indigo-600 border border-transparent rounded-lg hover:bg-indigo-700 transition-all shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 flex items-center transform hover:-translate-y-0.5">
+                                    <i data-lucide="check" class="w-4 h-4 mr-1.5"></i> 确认并提交审批
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 挂起状态提示 (隐藏状态，点击提交后显示) -->
+                    <div id="pending-status" class="hidden mt-4 p-4 bg-amber-50 border border-amber-200 rounded-xl shadow-sm text-sm text-gray-700 flex items-start card-enter">
+                        <div class="bg-white p-1 rounded-md shadow-sm border border-amber-100 mr-3">
+                            <i data-lucide="clock" class="w-4.5 h-4.5 text-amber-500 animate-pulse"></i>
+                        </div>
+                        <div>
+                            <span class="font-bold text-amber-900 block mb-0.5">长程任务已挂起 (Wait for Approval)</span>
+                            该配置任务正在等待外部 OA 系统审批 (流程单号: <a href="#" class="text-indigo-600 hover:underline font-mono">OA-2024-8902</a>)。审批通过后大模型将自动唤醒并执行底层线上配置。
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- 空白的用于滚动的锚点 -->
+            <div id="chat-anchor" class="h-8"></div>
+        </div>
+
+        <!-- 底部输入区 (固定在底部，悬浮效果) -->
+        <div class="absolute bottom-0 w-full p-4 bg-gradient-to-t from-white via-white to-transparent pt-10 z-30">
+            <div class="max-w-4xl mx-auto relative">
+                <!-- 快捷指令栏 -->
+                <div class="flex space-x-2 mb-3 px-1 overflow-x-auto hide-scrollbar">
+                    <button onclick="setInput('✨ 帮我分析一下昨天母婴大促的 ROI 折损原因')" class="flex-shrink-0 text-xs font-medium bg-white hover:bg-indigo-50 text-gray-600 hover:text-indigo-700 py-1.5 px-4 rounded-full transition-colors border border-gray-200 shadow-sm flex items-center">
+                        <i data-lucide="sparkles" class="w-3.5 h-3.5 mr-1.5 text-amber-400"></i> 分析昨日数据
+                    </button>
+                    <button onclick="setInput('🔍 查一下当前线上有哪些活动预算快用完了')" class="flex-shrink-0 text-xs font-medium bg-white hover:bg-indigo-50 text-gray-600 hover:text-indigo-700 py-1.5 px-4 rounded-full transition-colors border border-gray-200 shadow-sm flex items-center hidden sm:flex">
+                        <i data-lucide="search" class="w-3.5 h-3.5 mr-1.5 text-blue-400"></i> 巡检线上预算
+                    </button>
+                    <button onclick="setInput('⏰ 建一个盯盘任务，这周每天早 10 点出核心报表发我企微')" class="flex-shrink-0 text-xs font-medium bg-white hover:bg-indigo-50 text-gray-600 hover:text-indigo-700 py-1.5 px-4 rounded-full transition-colors border border-gray-200 shadow-sm flex items-center hidden md:flex">
+                        <i data-lucide="clock" class="w-3.5 h-3.5 mr-1.5 text-emerald-400"></i> 建每日报表调度
+                    </button>
+                </div>
+
+                <!-- 核心输入框 -->
+                <div class="relative bg-white border border-gray-300 rounded-2xl shadow-lg shadow-gray-200/50 focus-within:border-indigo-500 focus-within:ring-4 focus-within:ring-indigo-500/20 transition-all flex flex-col group">
+                    <textarea 
+                        id="user-input"
+                        class="w-full bg-transparent border-0 resize-none rounded-2xl pl-5 pr-24 py-4 text-sm text-gray-800 focus:ring-0 placeholder-gray-400 max-h-32 overflow-y-auto leading-relaxed" 
+                        rows="1"
+                        placeholder="输入自然语言指令，使用 '/' 唤起指定领域 Agent..."
+                        onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); }"
+                        oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"
+                    ></textarea>
+                    
+                    <div class="absolute right-2.5 bottom-2.5 flex items-center space-x-1.5 bg-white rounded-xl px-1 py-1">
+                        <button onclick="showToast('RAG 知识库上传组件开发中...', 'info')" class="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="上传附件/数据集">
+                            <i data-lucide="paperclip" class="w-5 h-5"></i>
+                        </button>
+                        <button onclick="sendMessage()" class="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all shadow-md hover:shadow-lg disabled:opacity-50 flex items-center justify-center transform hover:scale-105" title="发送 (Enter)">
+                            <i data-lucide="send-h" class="w-4 h-4 ml-0.5"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="text-center mt-2.5">
+                    <p class="text-[10px] font-medium text-gray-400 tracking-wide">AI 辅助决策生成内容，关键业务写入操作须经人工 <a href="#" class="text-gray-500 underline hover:text-indigo-600 transition-colors">验证复核</a>。</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 交互逻辑脚本 -->
+    <script>
+        // 初始化 Lucide 图标
+        lucide.createIcons();
+
+        const chatContainer = document.getElementById('chat-container');
+        const chatAnchor = document.getElementById('chat-anchor');
+        const userInput = document.getElementById('user-input');
+
+        // ========== Toast 反馈系统 ==========
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            let iconStr, bgClass, textClass;
+            if (type === 'success') {
+                iconStr = '<i data-lucide="check-circle" class="w-5 h-5 text-emerald-500"></i>';
+                bgClass = 'bg-white border-emerald-100'; textClass = 'text-gray-800';
+            } else if (type === 'info') {
+                iconStr = '<i data-lucide="info" class="w-5 h-5 text-blue-500"></i>';
+                bgClass = 'bg-white border-blue-100'; textClass = 'text-gray-800';
+            } else if (type === 'warning') {
+                iconStr = '<i data-lucide="alert-triangle" class="w-5 h-5 text-amber-500"></i>';
+                bgClass = 'bg-white border-amber-100'; textClass = 'text-gray-800';
+            }
+
+            toast.className = `flex items-center p-4 rounded-xl shadow-xl shadow-gray-200/50 border ${bgClass} ${textClass} min-w-[300px] max-w-sm pointer-events-auto toast-enter`;
+            toast.innerHTML = `<div class="flex-shrink-0 mr-3">${iconStr}</div><div class="text-sm font-bold tracking-wide">${message}</div>`;
+            
+            container.appendChild(toast);
+            lucide.createIcons();
+
+            setTimeout(() => {
+                toast.classList.replace('toast-enter', 'toast-leave');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // ========== 侧边栏任务逻辑 ==========
+        function toggleTaskStatus(btn, id) {
+            const icon = document.getElementById(`task-icon-${id}`);
+            const bar = document.getElementById(`task-status-bar-${id}`);
+            const pulse = document.getElementById(`task-pulse-${id}`);
+            
+            if (icon.getAttribute('data-lucide') === 'pause') {
+                icon.setAttribute('data-lucide', 'play');
+                bar.classList.replace('bg-green-500', 'bg-amber-400');
+                if(pulse) pulse.classList.add('hidden');
+                showToast('托管任务已暂停执行', 'warning');
+            } else {
+                icon.setAttribute('data-lucide', 'pause');
+                bar.classList.replace('bg-amber-400', 'bg-green-500');
+                if(pulse) pulse.classList.remove('hidden');
+                showToast('托管任务已恢复运行', 'success');
+            }
+            lucide.createIcons();
+        }
+
+        function removeTask(btn) {
+            const li = btn.closest('li');
+            li.classList.add('smooth-remove');
+            showToast('已安全移除后台托管任务', 'success');
+            setTimeout(() => {
+                li.remove();
+                const countBadge = document.getElementById('sidebar-task-count');
+                const num = parseInt(countBadge.innerText);
+                countBadge.innerText = `${num - 1} 运行中`;
+                if(num - 1 === 0) countBadge.classList.replace('bg-indigo-100', 'bg-gray-100');
+            }, 300);
+        }
+
+        // ========== 聊天区域核心交互 ==========
+        function scrollToBottom() {
+            chatContainer.scrollTo({ top: chatContainer.scrollHeight, behavior: 'smooth' });
+        }
+
+        function setInput(text) {
+            userInput.value = text;
+            userInput.style.height = 'auto';
+            userInput.style.height = userInput.scrollHeight + 'px';
+            userInput.focus();
+        }
+
+        // 模拟提交 GUI 表单审批
+        function submitConfig() {
+            const btn = document.getElementById('submit-btn');
+            const actions = document.getElementById('card-actions');
+            const pendingStatus = document.getElementById('pending-status');
+            const budget = document.getElementById('budget-input').value;
+            
+            // Loading 状态
+            btn.innerHTML = `<svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> 智能校验与提交中...`;
+            btn.disabled = true;
+
+            setTimeout(() => {
+                showToast('防资损强校验通过，已成功接入 OA 审批流', 'success');
+                
+                // UI 状态变为只读
+                actions.innerHTML = `
+                    <div class="flex items-center text-sm font-bold text-gray-500 bg-gray-100/80 px-4 py-2 rounded-lg border border-gray-200 w-full justify-center">
+                        <i data-lucide="lock" class="w-4 h-4 mr-2 text-gray-400"></i>
+                        表单数据已锁定，底层 Agent 挂起等待唤醒
+                    </div>
+                `;
+                lucide.createIcons();
+                
+                // 显示挂起状态
+                pendingStatus.classList.remove('hidden');
+                
+                // 输入框视觉置灰
+                const bInput = document.getElementById('budget-input');
+                bInput.disabled = true;
+                bInput.classList.replace('bg-indigo-50/30', 'bg-gray-100');
+                bInput.classList.replace('text-indigo-700', 'text-gray-500');
+                bInput.classList.replace('border-gray-300', 'border-gray-200');
+                
+                scrollToBottom();
+            }, 1500);
+        }
+
+        // 模拟发送自然语言消息
+        function sendMessage() {
+            const text = userInput.value.trim();
+            if (!text) return;
+
+            // 1. 渲染用户气泡
+            const userWrapper = document.createElement('div');
+            userWrapper.className = 'flex flex-row-reverse items-start group card-enter';
+            userWrapper.innerHTML = `
+                <img src="https://ui-avatars.com/api/?name=Op&background=e0e7ff&color=3730a3" alt="User" class="w-9 h-9 rounded-full ml-4 flex-shrink-0 shadow-sm ring-2 ring-white">
+                <div class="max-w-[75%] bg-indigo-600 text-white rounded-2xl rounded-tr-sm px-5 py-3.5 shadow-md group-hover:shadow-lg transition-shadow">
+                    <p class="text-sm leading-relaxed">${text}</p>
+                </div>
+            `;
+            chatContainer.insertBefore(userWrapper, chatAnchor);
+            
+            userInput.value = '';
+            userInput.style.height = 'auto'; // reset height
+            
+            // 2. 显示思考态
+            const typingId = 'typing-' + Date.now();
+            const typingWrapper = document.createElement('div');
+            typingWrapper.id = typingId;
+            typingWrapper.className = 'flex items-center card-enter mt-4 mb-2 pl-2';
+            typingWrapper.innerHTML = `
+                <div class="bg-gray-100 border border-gray-200 text-gray-400 p-1.5 rounded-full mr-3 flex-shrink-0 shadow-inner">
+                    <i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i>
+                </div>
+                <div class="bg-white border border-gray-200 shadow-sm px-4 py-3 rounded-2xl rounded-tl-sm typing-indicator flex items-center h-10">
+                    <span></span><span></span><span></span>
+                </div>
+            `;
+            chatContainer.insertBefore(typingWrapper, chatAnchor);
+            lucide.createIcons();
+            scrollToBottom();
+
+            // 3. 模拟网络响应与通用回答
+            setTimeout(() => {
+                const el = document.getElementById(typingId);
+                if (el) el.remove();
+                
+                const aiWrapper = document.createElement('div');
+                aiWrapper.className = 'flex items-start group card-enter mt-2';
+                aiWrapper.innerHTML = `
+                    <div class="bg-white border border-gray-200 text-primary p-2 rounded-xl mr-4 flex-shrink-0 shadow-sm mt-1 ring-1 ring-black/5 group-hover:shadow-md transition-shadow">
+                        <i data-lucide="bot" class="w-5 h-5"></i>
+                    </div>
+                    <div class="max-w-[85%] md:max-w-[75%]">
+                        <div class="text-gray-800 text-sm leading-relaxed bg-white border border-gray-200 shadow-sm px-5 py-4 rounded-2xl rounded-tl-sm ring-1 ring-black/5">
+                            收到！此操作为原型演示。在真实系统中，我的后端 <strong>Router 大脑</strong> 会解析您的这句话，根据您的业务身份鉴权后，调用对应的底层工具链 (Tools) 为您执行查询、配置或创建监控任务的操作。
+                        </div>
+                    </div>
+                `;
+                chatContainer.insertBefore(aiWrapper, chatAnchor);
+                lucide.createIcons();
+                scrollToBottom();
+            }, 1800);
+        }
+
+        // 初始化
+        window.onload = () => {
+            userInput.focus();
+            setTimeout(scrollToBottom, 100);
+        };
+    </script>
+</body>
+</html>

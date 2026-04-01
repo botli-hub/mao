@@ -1,0 +1,1596 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MAO 管理控制台 - 终极完整版</title>
+  <!-- 引入 Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 引入 Lucide 图标库 -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#4f46e5',
+            'primary-hover': '#4338ca',
+            darkbg: '#0f172a',
+            darkcard: '#1e293b',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* 全局滚动条美化 */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    .dark-scroll::-webkit-scrollbar-thumb { background: #475569; }
+     
+    /* 基础动画 */
+    .fade-in { animation: fadeIn 0.3s ease-out forwards; }
+    .fade-out { animation: fadeOut 0.3s ease-in forwards; }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeOut {
+      from { opacity: 1; transform: translateY(0); }
+      to { opacity: 0; transform: translateY(5px); }
+    }
+    /* 脑电图日志连线效果 */
+    .trace-line::before {
+      content: ''; position: absolute; left: 11px; top: 24px; bottom: -8px;
+      width: 2px; background-color: #334155; z-index: 0;
+    }
+    .trace-item:last-child .trace-line::before { display: none; }
+    /* 画布 SVG 样式 */
+    .canvas-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+    .canvas-path { fill: none; stroke: #94a3b8; stroke-width: 2; border-radius: 5px; stroke-dasharray: 4; animation: dash 20s linear infinite; }
+    @keyframes dash { to { stroke-dashoffset: -1000; } }
+    /* Toast 动画 */
+    .toast-enter { animation: slideInRight 0.3s ease-out forwards; }
+    .toast-leave { animation: fadeOutRight 0.3s ease-in forwards; }
+    @keyframes slideInRight {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    @keyframes fadeOutRight {
+      from { transform: translateX(0); opacity: 1; }
+      to { transform: translateX(100%); opacity: 0; }
+    }
+     
+    /* 平滑移除过渡 */
+    .smooth-remove {
+      transition: all 0.3s ease;
+      opacity: 0 !important;
+      transform: scale(0.95);
+    }
+    /* 抽屉划出动画 */
+    .drawer-slide-in { transform: translateX(0); }
+    .drawer-slide-out { transform: translateX(100%); }
+  </style>
+</head>
+<body class="bg-gray-50 h-screen flex flex-col overflow-hidden text-gray-800 font-sans relative">
+  <!-- 全局 Toast 容器 (z-index 设为最高) -->
+  <div id="toast-container" class="fixed top-16 right-4 z-[100] flex flex-col space-y-3 pointer-events-none"></div>
+  <!-- 顶部导航栏 -->
+  <header class="h-14 bg-white text-gray-800 flex items-center justify-between px-4 flex-shrink-0 z-20 border-b border-gray-200">
+    <div class="flex items-center space-x-8">
+      <div class="flex items-center font-bold text-lg tracking-tight cursor-pointer" onclick="switchTab('dashboard')">
+        <i data-lucide="cpu" class="w-5 h-5 text-indigo-600 mr-2"></i>
+        MAO Console
+      </div>
+      <nav class="hidden md:flex space-x-1 lg:space-x-2 text-sm font-medium" id="top-nav">
+        <button onclick="switchTab('skill-registry')" class="nav-btn px-2 lg:px-3 py-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors flex items-center">
+          <i data-lucide="blocks" class="w-4 h-4 mr-1.5 text-gray-400 nav-icon"></i><span class="hidden xl:inline">技能注册中心</span><span class="xl:hidden">技能</span>
+        </button>
+        <button onclick="switchTab('agent-factory')" class="nav-btn active px-2 lg:px-3 py-1.5 text-indigo-700 bg-indigo-50 ring-1 ring-indigo-200 rounded-md transition-colors flex items-center">
+          <i data-lucide="flask-conical" class="w-4 h-4 mr-1.5 text-indigo-600 nav-icon"></i><span class="hidden xl:inline">智能体工厂</span><span class="xl:hidden">智能体</span>
+        </button>
+        <button onclick="switchTab('workflow-canvas')" class="nav-btn px-2 lg:px-3 py-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors flex items-center">
+          <i data-lucide="git-merge" class="w-4 h-4 mr-1.5 text-gray-400 nav-icon"></i><span class="hidden xl:inline">全局编排画布</span><span class="xl:hidden">画布</span>
+        </button>
+        <button onclick="switchTab('cron-list')" class="nav-btn px-2 lg:px-3 py-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors flex items-center">
+          <i data-lucide="clock" class="w-4 h-4 mr-1.5 text-gray-400 nav-icon"></i><span class="hidden xl:inline">定时调度管理</span><span class="xl:hidden">调度</span>
+        </button>
+        <button onclick="switchTab('session-list')" class="nav-btn px-2 lg:px-3 py-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors flex items-center">
+          <i data-lucide="history" class="w-4 h-4 mr-1.5 text-gray-400 nav-icon"></i><span class="hidden xl:inline">会话审计日志</span><span class="xl:hidden">审计</span>
+        </button>
+        <button onclick="switchTab('dashboard')" class="nav-btn px-2 lg:px-3 py-1.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-colors flex items-center">
+          <i data-lucide="layout-dashboard" class="w-4 h-4 mr-1.5 text-gray-400 nav-icon"></i><span class="hidden xl:inline">监控调度大盘</span><span class="xl:hidden">大盘</span>
+        </button>
+      </nav>
+    </div>
+    <div class="flex items-center space-x-4">
+      <span class="text-xs bg-gray-100 text-gray-600 border border-gray-200 px-2 py-1 rounded hidden sm:inline-block">环境: 生产 (PROD)</span>
+      <img src="https://ui-avatars.com/api/?name=Admin&background=4f46e5&color=fff" alt="Admin" class="w-7 h-7 rounded-full cursor-pointer ring-2 ring-transparent hover:ring-indigo-400 transition-all" onclick="showToast('管理员设置面暂未开放', 'warning')">
+    </div>
+  </header>
+  <!-- ========================================================= -->
+  <!-- 动态页面容器 (App Container)                -->
+  <!-- ========================================================= -->
+  <div id="app-container" class="flex-1 flex flex-col relative overflow-hidden">
+    <!-- ==================== 1. 技能注册中心 Tab ==================== -->
+    <div id="page-skill-registry" class="page-view flex-1 flex flex-col bg-white">
+      <div class="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50/50">
+        <div>
+          <h2 class="text-xl font-bold text-gray-800">技能注册中心 (Skill Registry)</h2>
+          <p class="text-sm text-gray-500 mt-1">管理并注册底层业务系统的 OpenAPI，为 Agent 提供原子化武器库。</p>
+        </div>
+        <div class="flex space-x-3">
+          <button onclick="openImportModal()" class="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 shadow-sm flex items-center transition-colors">
+            <i data-lucide="download" class="w-4 h-4 mr-2"></i> 导入 Swagger / JSON
+          </button>
+          <button onclick="openSkillDrawer()" class="px-4 py-2 text-sm text-white bg-primary rounded-md hover:bg-primary-hover shadow-sm flex items-center transition-colors">
+            <i data-lucide="plus" class="w-4 h-4 mr-1"></i> 新建技能
+          </button>
+        </div>
+      </div>
+      <div class="p-6 flex-1 overflow-auto bg-gray-50">
+        <!-- 搜索与过滤 -->
+        <div class="flex space-x-4 mb-4">
+          <div class="relative flex-1 max-w-md">
+            <i data-lucide="search" class="absolute left-3 top-2.5 w-4 h-4 text-gray-400"></i>
+            <input type="text" placeholder="搜索技能名称、标识或描述..." class="w-full pl-9 pr-4 py-2 text-sm border border-gray-300 rounded-md focus:ring-primary focus:border-primary outline-none shadow-sm" onkeyup="if(event.key === 'Enter') showToast('检索完成: 共找到 2 个相关技能', 'success')">
+          </div>
+          <select class="text-sm border border-gray-300 rounded-md px-3 py-2 bg-white shadow-sm outline-none" onchange="showToast('已按业务域进行筛选', 'info')">
+            <option>所有业务域</option>
+            <option>营销域 (Marketing)</option>
+            <option>用户域 (User)</option>
+          </select>
+        </div>
+        <!-- 技能列表 -->
+        <div class="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-200">
+                <th class="px-6 py-3 font-medium">技能标识 (Skill ID)</th>
+                <th class="px-6 py-3 font-medium">业务描述</th>
+                <th class="px-6 py-3 font-medium">鉴权方式</th>
+                <th class="px-6 py-3 font-medium">调用热度</th>
+                <th class="px-6 py-3 font-medium text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 text-sm">
+              <tr class="hover:bg-gray-50 transition-colors">
+                <td class="px-6 py-4">
+                  <div class="font-medium text-indigo-600 flex items-center">
+                    <i data-lucide="database" class="w-4 h-4 mr-2 text-gray-400"></i> QueryTaskConfig
+                  </div>
+                  <div class="text-xs text-gray-500 mt-1">GET /api/v1/task/config</div>
+                </td>
+                <td class="px-6 py-4">查询指定营销任务的配置规则及库存状态</td>
+                <td class="px-6 py-4"><span class="bg-blue-50 text-blue-600 border border-blue-200 px-2 py-0.5 rounded text-xs">User Token 透传</span></td>
+                <td class="px-6 py-4"><div class="flex items-center text-gray-500"><i data-lucide="trending-up" class="w-3 h-3 text-green-500 mr-1"></i> 1.2w/日</div></td>
+                <td class="px-6 py-4 text-right text-gray-400">
+                  <button onclick="openSkillDrawer('QueryTaskConfig')" class="hover:text-primary mx-1" title="编辑 Schema"><i data-lucide="edit" class="w-4 h-4"></i></button>
+                  <button onclick="showToast('接口联调功能建设中...', 'info')" class="hover:text-primary mx-1" title="测试接口"><i data-lucide="play" class="w-4 h-4"></i></button>
+                </td>
+              </tr>
+              <tr class="hover:bg-gray-50 transition-colors">
+                <td class="px-6 py-4">
+                  <div class="font-medium text-indigo-600 flex items-center">
+                    <i data-lucide="bell-ring" class="w-4 h-4 mr-2 text-gray-400"></i> SendAlertMsg
+                  </div>
+                  <div class="text-xs text-gray-500 mt-1">POST /api/v1/notify/send</div>
+                </td>
+                <td class="px-6 py-4">向指定业务群或个人发送企微告警卡片</td>
+                <td class="px-6 py-4"><span class="bg-gray-100 text-gray-600 border border-gray-200 px-2 py-0.5 rounded text-xs">System AK/SK</span></td>
+                <td class="px-6 py-4"><div class="flex items-center text-gray-500"><i data-lucide="activity" class="w-3 h-3 text-gray-400 mr-1"></i> 850/日</div></td>
+                <td class="px-6 py-4 text-right text-gray-400">
+                  <button onclick="openSkillDrawer('SendAlertMsg')" class="hover:text-primary mx-1" title="编辑 Schema"><i data-lucide="edit" class="w-4 h-4"></i></button>
+                  <button onclick="showToast('接口联调功能建设中...', 'info')" class="hover:text-primary mx-1" title="测试接口"><i data-lucide="play" class="w-4 h-4"></i></button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+       
+      <!-- 技能注册中心：分页组件 -->
+      <div class="px-6 py-4 border-t border-gray-200 bg-white flex items-center justify-between flex-shrink-0 z-10">
+        <div class="text-sm text-gray-500">显示第 <span class="font-medium text-gray-900">1</span> 到 <span class="font-medium text-gray-900">10</span> 条，共 <span class="font-medium text-gray-900">12</span> 条记录</div>
+        <div class="flex items-center space-x-1">
+          <button class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-400 bg-gray-50 cursor-not-allowed">上一页</button>
+          <button class="px-3 py-1 text-sm border border-indigo-500 rounded text-indigo-600 bg-indigo-50 font-medium">1</button>
+          <button onclick="showToast('正在加载第 2 页数据...', 'info')" class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-600 bg-white hover:bg-gray-50 transition-colors">2</button>
+          <button onclick="showToast('正在加载下一页数据...', 'info')" class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-600 bg-white hover:bg-gray-50 transition-colors">下一页</button>
+        </div>
+      </div>
+    </div>
+    <!-- ==================== 2. 智能体工厂 Tab (一级列表页) ==================== -->
+    <div id="page-agent-factory" class="page-view hidden flex-1 flex flex-col bg-gray-50">
+      <div class="p-6 border-b border-gray-200 bg-white flex justify-between items-center shadow-sm z-10">
+        <div>
+          <h2 class="text-xl font-bold text-gray-800">智能体工厂 (Agent Factory)</h2>
+          <p class="text-sm text-gray-500 mt-1">组装领域专家，为不同的业务节点配置专属的数字员工。</p>
+        </div>
+        <button onclick="showToast('初始化空 Agent 模板...', 'success')" class="px-4 py-2 text-sm text-white bg-primary rounded-md hover:bg-primary-hover shadow-sm flex items-center transition-colors">
+          <i data-lucide="bot" class="w-4 h-4 mr-2"></i> 创建智能体
+        </button>
+      </div>
+       
+      <div class="flex-1 p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 content-start">
+        <!-- Agent 卡片 1 (点击进入沙盒) -->
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer group flex flex-col" onclick="openAgentEditor('agent-1')">
+          <div class="p-5 flex-1">
+            <div class="flex justify-between items-start mb-4">
+              <div class="w-12 h-12 rounded-lg bg-indigo-50 text-primary flex items-center justify-center border border-indigo-100 group-hover:bg-primary group-hover:text-white transition-colors">
+                <i data-lucide="shield-check" class="w-6 h-6"></i>
+              </div>
+              <span class="bg-green-100 text-green-700 text-xs font-semibold px-2 py-1 rounded-full border border-green-200">在线 v1.2</span>
+            </div>
+            <h3 class="text-lg font-bold text-gray-900 mb-1">发奖核查专员</h3>
+            <p class="text-sm text-gray-500 line-clamp-2">负责根据客诉信息或任务ID，自动盘查库存状态并提供资损风险预警。</p>
+             
+            <div class="mt-4 flex items-center space-x-2 text-xs text-gray-400">
+              <span class="flex items-center"><i data-lucide="cpu" class="w-3 h-3 mr-1"></i> Gemini Pro</span><span>•</span>
+              <span class="flex items-center"><i data-lucide="link" class="w-3 h-3 mr-1"></i> 2 技能</span>
+            </div>
+          </div>
+          <div class="border-t border-gray-100 px-5 py-3 bg-gray-50/50 rounded-b-xl flex justify-between items-center">
+            <span class="text-xs text-gray-500">被调用: 4.5k 次</span>
+            <button class="text-sm text-primary font-medium flex items-center group-hover:translate-x-1 transition-transform">
+              配置与调试 <i data-lucide="arrow-right" class="w-4 h-4 ml-1"></i>
+            </button>
+          </div>
+        </div>
+        <!-- Agent 卡片 2 (点击进入沙盒) -->
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer group flex flex-col" onclick="showToast('正在加载【草稿】编辑环境...', 'info'); setTimeout(() => openAgentEditor('agent-2'), 500)">
+          <div class="p-5 flex-1">
+            <div class="flex justify-between items-start mb-4">
+              <div class="w-12 h-12 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                <i data-lucide="bar-chart-2" class="w-6 h-6"></i>
+              </div>
+              <span class="bg-gray-100 text-gray-600 text-xs font-semibold px-2 py-1 rounded-full border border-gray-200">草稿 v0.8</span>
+            </div>
+            <h3 class="text-lg font-bold text-gray-900 mb-1">营销数据分析师</h3>
+            <p class="text-sm text-gray-500 line-clamp-2">根据自然语言诉求，自动调用 BI 接口生成活动漏斗及转化率报告。</p>
+            <div class="mt-4 flex items-center space-x-2 text-xs text-gray-400">
+              <span class="flex items-center"><i data-lucide="cpu" class="w-3 h-3 mr-1"></i> Gemini Flash</span><span>•</span>
+              <span class="flex items-center"><i data-lucide="link" class="w-3 h-3 mr-1"></i> 5 技能</span>
+            </div>
+          </div>
+          <div class="border-t border-gray-100 px-5 py-3 bg-gray-50/50 rounded-b-xl flex justify-between items-center">
+            <span class="text-xs text-gray-500">被调用: 0 次</span>
+            <button class="text-sm text-emerald-600 font-medium flex items-center group-hover:translate-x-1 transition-transform">
+              继续编辑 <i data-lucide="arrow-right" class="w-4 h-4 ml-1"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+       
+      <!-- 智能体工厂：分页组件 -->
+      <div class="px-6 py-4 border-t border-gray-200 bg-white flex items-center justify-between flex-shrink-0 z-10">
+        <div class="text-sm text-gray-500">显示第 <span class="font-medium text-gray-900">1</span> 到 <span class="font-medium text-gray-900">12</span> 个，共 <span class="font-medium text-gray-900">45</span> 个智能体</div>
+        <div class="flex items-center space-x-1">
+          <button class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-400 bg-gray-50 cursor-not-allowed">上一页</button>
+          <button class="px-3 py-1 text-sm border border-indigo-500 rounded text-indigo-600 bg-indigo-50 font-medium">1</button>
+          <button onclick="showToast('正在加载第 2 页数据...', 'info')" class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-600 bg-white hover:bg-gray-50 transition-colors">2</button>
+          <button onclick="showToast('正在加载第 3 页数据...', 'info')" class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-600 bg-white hover:bg-gray-50 transition-colors">3</button>
+          <span class="text-gray-400 px-2">...</span>
+          <button onclick="showToast('正在加载第 4 页数据...', 'info')" class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-600 bg-white hover:bg-gray-50 transition-colors">4</button>
+          <button onclick="showToast('正在加载下一页数据...', 'info')" class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-600 bg-white hover:bg-gray-50 transition-colors">下一页</button>
+        </div>
+      </div>
+    </div>
+    <!-- ==================== 2.1 智能体沙盒 (二级页面) ==================== -->
+    <div id="page-agent-editor" class="page-view hidden flex-1 flex flex-col">
+      <!-- 二级页面工具栏 -->
+      <div class="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-4 flex-shrink-0 z-10 shadow-sm">
+        <div class="flex items-center text-sm text-gray-600">
+          <button onclick="switchTab('agent-factory')" class="hover:text-primary transition-colors font-medium text-gray-500 flex items-center">
+            <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> 返回工厂
+          </button>
+          <span class="mx-3 border-l border-gray-300 h-4"></span>
+          <i data-lucide="shield-check" class="w-4 h-4 mr-1.5 text-indigo-500"></i>
+          <span class="font-bold text-gray-900">发奖核查专员</span>
+          <span class="ml-2 bg-green-100 text-green-700 text-[10px] px-1.5 py-0.5 rounded border border-green-200" id="agent-version">v1.2</span>
+        </div>
+        <div class="flex space-x-2">
+          <button onclick="saveDraft(this)" class="px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors flex items-center shadow-sm">
+            <i data-lucide="save" class="w-4 h-4 mr-1 text-gray-400"></i> <span class="btn-text">保存草稿</span>
+          </button>
+          <button onclick="publishAgent(this)" class="px-3 py-1.5 text-sm text-white bg-primary rounded hover:bg-primary-hover transition-colors shadow-sm flex items-center">
+            <i data-lucide="rocket" class="w-4 h-4 mr-1"></i> <span class="btn-text">发布至 Router</span>
+          </button>
+        </div>
+      </div>
+      <!-- 主体三栏布局 -->
+      <div class="flex-1 flex overflow-hidden">
+        <!-- 左栏：配置区 -->
+        <section class="w-[360px] bg-white border-r border-gray-200 flex flex-col flex-shrink-0 overflow-y-auto">
+          <div class="p-4 border-b border-gray-100">
+            <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">基础配置</h3>
+            <div class="space-y-4">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">Agent 名称</label>
+                <input type="text" value="发奖核查专员" class="w-full text-sm border border-gray-300 rounded p-2 focus:ring-1 focus:ring-primary outline-none transition-shadow">
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1">底层模型 (Model)</label>
+                <select class="w-full text-sm border border-gray-300 rounded p-2 bg-gray-50 focus:ring-1 focus:ring-primary outline-none transition-shadow" onchange="showToast('已切换底层大模型', 'success')">
+                  <option>Gemini 1.5 Pro (强逻辑推理)</option>
+                  <option>Gemini 1.5 Flash (快速响应)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <!-- System Prompt -->
+          <div class="p-4 border-b border-gray-100 flex-1 flex flex-col min-h-[300px]">
+            <div class="flex justify-between items-center mb-2">
+              <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">系统指令 (System Prompt)</h3>
+              <button onclick="optimizePrompt()" class="text-xs text-primary hover:underline flex items-center">
+                <i data-lucide="wand-2" class="w-3 h-3 mr-1"></i> 优化提示词
+              </button>
+            </div>
+            <textarea id="system-prompt" class="w-full flex-1 text-xs font-mono bg-gray-50 border border-gray-300 rounded p-3 text-gray-700 focus:ring-1 focus:ring-primary outline-none resize-none transition-shadow">你是营销平台的“发奖核查专员”。
+你的职责是根据用户提供的活动ID或客诉信息，排查发奖失败的原因。
+【工作流要求】
+1. 必须先调用工具查询活动的配置及库存状态。
+2. 结合客观数据进行分析，严禁捏造虚假库存数据。
+3. 如果发现异常，请给出修复建议。
+4. 输出必须客观、简洁，采用 Markdown 格式。</textarea>
+          </div>
+          <!-- 技能挂载 -->
+          <div class="p-4">
+            <div class="flex justify-between items-center mb-3">
+              <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">技能挂载 (Tools: 3)</h3>
+              <button onclick="showToast('打开技能注册中心选择面板...', 'info')" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2 py-1 rounded transition-colors border border-gray-200">+ 添加</button>
+            </div>
+            <ul class="space-y-2">
+              <li class="flex items-center justify-between bg-indigo-50 border border-indigo-200 p-2 rounded shadow-sm hover:border-indigo-400 transition-colors">
+                <div class="flex items-center">
+                  <i data-lucide="sitemap" class="w-4 h-4 text-indigo-600 mr-2"></i>
+                  <div>
+                    <p class="text-sm font-medium text-indigo-900">RunRiskCheckSOP <span class="text-[10px] bg-indigo-200 text-indigo-700 px-1 rounded ml-1 border border-indigo-300">宏工具</span></p>
+                    <p class="text-[10px] text-indigo-600">强制执行资损排查画布流</p>
+                  </div>
+                </div>
+                <input type="checkbox" checked class="text-primary rounded focus:ring-primary w-4 h-4 cursor-pointer" onchange="showToast('更新宏工具挂载状态', 'success')">
+              </li>
+              <li class="flex items-center justify-between bg-white border border-gray-200 p-2 rounded shadow-sm hover:border-indigo-300 transition-colors">
+                <div class="flex items-center">
+                  <i data-lucide="database" class="w-4 h-4 text-blue-500 mr-2"></i>
+                  <div>
+                    <p class="text-sm font-medium text-gray-800">QueryTaskConfig</p>
+                    <p class="text-[10px] text-gray-500">查询任务及券库存信息</p>
+                  </div>
+                </div>
+                <input type="checkbox" checked class="text-primary rounded focus:ring-primary w-4 h-4 cursor-pointer" onchange="showToast('更新技能挂载状态', 'success')">
+              </li>
+            </ul>
+          </div>
+          <!-- 知识库挂载 (RAG) -->
+          <div class="p-4 border-t border-gray-100 mb-4">
+            <div class="flex justify-between items-center mb-3">
+              <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider">知识库挂载 (RAG)</h3>
+              <button onclick="showToast('打开知识库关联面板...', 'info')" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2 py-1 rounded transition-colors border border-gray-200">+ 关联</button>
+            </div>
+            <ul class="space-y-2">
+              <li class="flex items-center justify-between bg-white border border-gray-200 p-2 rounded shadow-sm hover:border-indigo-300 transition-colors">
+                <div class="flex items-center">
+                  <i data-lucide="book-open" class="w-4 h-4 text-emerald-500 mr-2"></i>
+                  <div>
+                    <p class="text-sm font-medium text-gray-800">营销风控白皮书_v3</p>
+                    <p class="text-[10px] text-gray-500">向量检索 | 包含 32 篇文档</p>
+                  </div>
+                </div>
+                <input type="checkbox" checked class="text-primary rounded focus:ring-primary w-4 h-4 cursor-pointer" onchange="showToast('更新知识库挂载状态', 'success')">
+              </li>
+            </ul>
+          </div>
+        </section>
+        <!-- 中栏：模拟器 -->
+        <section class="flex-1 flex flex-col bg-gray-50 relative border-r border-gray-200 min-w-[300px]">
+          <div class="absolute top-0 w-full bg-white/90 backdrop-blur border-b border-gray-200 px-4 py-2 flex items-center justify-between z-10">
+            <span class="text-sm font-medium text-gray-700 flex items-center">
+              <i data-lucide="message-square-dashed" class="w-4 h-4 mr-2 text-gray-400"></i>沙盒测试对话
+            </span>
+            <button onclick="clearChat()" class="text-xs text-gray-500 hover:text-gray-800 transition-colors p-1 bg-gray-100 rounded hover:bg-gray-200">清空会话</button>
+          </div>
+          <div id="simulator-chat" class="flex-1 overflow-y-auto p-4 pt-14 space-y-4">
+            <div class="flex justify-center"><span class="text-[10px] bg-gray-200/80 text-gray-500 px-3 py-1 rounded-full border border-gray-300">沙盒环境已隔离，Tool 调用将打向测试环境</span></div>
+          </div>
+          <div class="p-3 bg-white border-t border-gray-200 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] z-20">
+            <div class="relative flex items-center">
+              <input type="text" id="sim-input" class="w-full bg-gray-50 border border-gray-300 rounded-lg pl-4 pr-12 py-3 text-sm focus:bg-white focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all shadow-inner" placeholder="输入测试指令..." value="查一下活动 1024 的配置和库存" onkeydown="if(event.key === 'Enter') runSimulation()">
+              <button onclick="runSimulation()" class="absolute right-2 p-2 text-white bg-primary hover:bg-primary-hover rounded-md transition-colors shadow-sm" title="发送测试">
+                <i data-lucide="send" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+        </section>
+        <!-- 右栏：脑电图追踪面板 -->
+        <section class="w-[450px] bg-darkbg text-gray-300 flex flex-col flex-shrink-0 font-mono text-xs z-0 shadow-[-4px_0_15px_-3px_rgba(0,0,0,0.1)]">
+          <div class="h-10 border-b border-gray-800 flex items-center justify-between px-4 bg-gray-900/80 backdrop-blur flex-shrink-0 z-10">
+            <div class="flex items-center text-indigo-400 font-semibold tracking-wide">
+              <i data-lucide="activity" class="w-4 h-4 mr-2"></i> Agentic Trace Log
+            </div>
+            <div class="flex items-center space-x-2">
+              <span class="flex h-2 w-2 relative">
+                <span id="trace-indicator-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75 hidden"></span>
+                <span id="trace-indicator" class="relative inline-flex rounded-full h-2 w-2 bg-gray-600"></span>
+              </span>
+              <span id="trace-status" class="text-[10px] text-gray-500">IDLE</span>
+            </div>
+          </div>
+          <div id="trace-container" class="flex-1 overflow-y-auto p-4 dark-scroll space-y-1 pb-10">
+            <div class="text-gray-500 text-center mt-10 italic">等待会话触发...</div>
+          </div>
+        </section>
+      </div>
+    </div>
+    <!-- ==================== 3. 全局编排画布 Tab ==================== -->
+    <div id="page-workflow-canvas" class="page-view hidden flex-1 flex flex-col bg-gray-50">
+      <div class="p-6 border-b border-gray-200 bg-white flex justify-between items-center shadow-sm z-10">
+        <div>
+          <h2 class="text-xl font-bold text-gray-800">全局编排画布 (SOP Orchestration)</h2>
+          <p class="text-sm text-gray-500 mt-1">将标准化的业务流程固化为 SOP 宏工具，供 Agent 自主规划调用或通过定时任务触发。</p>
+        </div>
+        <button onclick="showToast('初始化空 SOP 画布...', 'success'); setTimeout(() => openCanvasEditor('new'), 500)" class="px-4 py-2 text-sm text-white bg-primary rounded-md hover:bg-primary-hover shadow-sm flex items-center transition-colors">
+          <i data-lucide="plus" class="w-4 h-4 mr-2"></i> 新建画布 SOP
+        </button>
+      </div>
+       
+      <div class="flex-1 p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 content-start">
+        <!-- SOP 卡片 1 -->
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer group flex flex-col" onclick="openCanvasEditor('canvas-1')">
+          <div class="p-5 flex-1">
+            <div class="flex justify-between items-start mb-4">
+              <div class="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center border border-indigo-100 group-hover:bg-indigo-500 group-hover:text-white transition-colors">
+                <i data-lucide="sitemap" class="w-5 h-5"></i>
+              </div>
+              <span class="bg-green-100 text-green-700 text-xs font-semibold px-2 py-1 rounded-full border border-green-200">在线 (已注册为宏工具)</span>
+            </div>
+            <h3 class="text-lg font-bold text-gray-900 mb-1">上线前资损风险排查 SOP</h3>
+            <p class="text-sm text-gray-500 line-clamp-2">拦截高危配置意图，强制进行多节点规则推演与验证，确保输出合规的审批卡片。</p>
+            <div class="mt-4 flex flex-wrap gap-2 text-xs text-gray-500">
+              <span class="bg-gray-100 px-2 py-1 rounded flex items-center"><i data-lucide="bot" class="w-3 h-3 mr-1"></i> 关联 Agent: 2</span>
+              <span class="bg-gray-100 px-2 py-1 rounded flex items-center"><i data-lucide="share-2" class="w-3 h-3 mr-1"></i> 节点数: 4</span>
+            </div>
+          </div>
+          <div class="border-t border-gray-100 px-5 py-3 bg-gray-50/50 rounded-b-xl flex justify-between items-center">
+            <span class="text-xs text-gray-500">本周触发: 1.2k 次</span>
+            <button class="text-sm text-primary font-medium flex items-center group-hover:translate-x-1 transition-transform">
+              编辑画布 <i data-lucide="arrow-right" class="w-4 h-4 ml-1"></i>
+            </button>
+          </div>
+        </div>
+        <!-- SOP 卡片 2 -->
+        <div class="bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-indigo-300 transition-all cursor-pointer group flex flex-col" onclick="showToast('正在加载画布数据...', 'info'); setTimeout(() => openCanvasEditor('canvas-2'), 500)">
+          <div class="p-5 flex-1">
+            <div class="flex justify-between items-start mb-4">
+              <div class="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100 group-hover:bg-amber-500 group-hover:text-white transition-colors">
+                <i data-lucide="git-pull-request" class="w-5 h-5"></i>
+              </div>
+              <span class="bg-gray-100 text-gray-600 text-xs font-semibold px-2 py-1 rounded-full border border-gray-200">草稿 v0.5</span>
+            </div>
+            <h3 class="text-lg font-bold text-gray-900 mb-1">双十一客诉自动定责流</h3>
+            <p class="text-sm text-gray-500 line-clamp-2">接收客服工单 Webhook，串联数据分析 Agent 进行归因，并判定是否发放补偿优惠券。</p>
+            <div class="mt-4 flex flex-wrap gap-2 text-xs text-gray-500">
+              <span class="bg-gray-100 px-2 py-1 rounded flex items-center"><i data-lucide="webhook" class="w-3 h-3 mr-1"></i> 触发源: Webhook</span>
+              <span class="bg-gray-100 px-2 py-1 rounded flex items-center"><i data-lucide="share-2" class="w-3 h-3 mr-1"></i> 节点数: 8</span>
+            </div>
+          </div>
+          <div class="border-t border-gray-100 px-5 py-3 bg-gray-50/50 rounded-b-xl flex justify-between items-center">
+            <span class="text-xs text-gray-500">本周触发: 0 次</span>
+            <button class="text-sm text-amber-600 font-medium flex items-center group-hover:translate-x-1 transition-transform">
+              继续编辑 <i data-lucide="arrow-right" class="w-4 h-4 ml-1"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+       
+      <!-- 编排画布：分页组件 -->
+      <div class="px-6 py-4 border-t border-gray-200 bg-white flex items-center justify-between flex-shrink-0 z-10">
+        <div class="text-sm text-gray-500">显示第 <span class="font-medium text-gray-900">1</span> 到 <span class="font-medium text-gray-900">10</span> 个，共 <span class="font-medium text-gray-900">24</span> 个画布</div>
+        <div class="flex items-center space-x-1">
+          <button class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-400 bg-gray-50 cursor-not-allowed">上一页</button>
+          <button class="px-3 py-1 text-sm border border-indigo-500 rounded text-indigo-600 bg-indigo-50 font-medium">1</button>
+          <button onclick="showToast('正在加载第 2 页数据...', 'info')" class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-600 bg-white hover:bg-gray-50 transition-colors">2</button>
+          <button onclick="showToast('正在加载第 3 页数据...', 'info')" class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-600 bg-white hover:bg-gray-50 transition-colors">3</button>
+          <button onclick="showToast('正在加载下一页数据...', 'info')" class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-600 bg-white hover:bg-gray-50 transition-colors">下一页</button>
+        </div>
+      </div>
+    </div>
+    <!-- ==================== 3.1 全局编排画布编辑器 (二级页面) ==================== -->
+    <div id="page-workflow-editor" class="page-view hidden flex-1 flex flex-col bg-gray-100 relative overflow-hidden">
+      <!-- 二级页面工具栏 -->
+      <div class="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-4 flex-shrink-0 z-20 shadow-sm relative">
+        <div class="flex items-center text-sm text-gray-600">
+          <button onclick="switchTab('workflow-canvas')" class="hover:text-primary transition-colors font-medium text-gray-500 flex items-center">
+            <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> 返回画布列表
+          </button>
+          <span class="mx-3 border-l border-gray-300 h-4"></span>
+          <i data-lucide="sitemap" class="w-4 h-4 mr-1.5 text-indigo-500"></i>
+          <span class="font-bold text-gray-900">上线前资损风险排查 SOP</span>
+          <span class="ml-2 bg-green-100 text-green-700 text-[10px] px-1.5 py-0.5 rounded border border-green-200">v2.0</span>
+        </div>
+        <div class="flex space-x-2">
+          <button onclick="showToast('已保存画布草稿', 'success')" class="px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors flex items-center shadow-sm">
+            <i data-lucide="save" class="w-4 h-4 mr-1 text-gray-400"></i> 保存
+          </button>
+          <button onclick="showToast('已成功发布为宏工具，现在您可以将其挂载给指定的 Agent 或是定时任务了', 'success')" class="px-3 py-1.5 text-sm text-white bg-primary rounded hover:bg-primary-hover transition-colors shadow-sm flex items-center">
+            <i data-lucide="zap" class="w-4 h-4 mr-1"></i> 注册为宏工具
+          </button>
+        </div>
+      </div>
+      <!-- 画布主体区 -->
+      <div class="flex-1 flex relative">
+        <!-- SVG 连线层 -->
+        <svg class="canvas-svg">
+          <path class="canvas-path" d="M 280 200 C 400 200, 400 120, 500 120" />
+          <path class="canvas-path" d="M 280 200 C 400 200, 400 280, 500 280" />
+          <path class="canvas-path" d="M 750 120 C 850 120, 850 200, 950 200" />
+          <path class="canvas-path" d="M 750 280 C 850 280, 850 200, 950 200" />
+        </svg>
+        <!-- 左侧物料面板 -->
+        <div class="w-64 bg-white border-r border-gray-200 flex flex-col shadow-lg z-10">
+          <div class="p-4 border-b border-gray-100 font-bold text-sm text-gray-800 flex justify-between items-center">
+            编排组件 (Nodes)
+          </div>
+          <div class="p-4 space-y-4 overflow-y-auto">
+            <div>
+              <div class="text-xs text-gray-400 mb-2 uppercase font-semibold">Triggers</div>
+              <div onclick="showToast('已选中触发器组件', 'info')" class="bg-gray-50 border border-gray-200 rounded p-2 text-sm flex items-center cursor-pointer hover:border-indigo-400 hover:shadow-sm transition-all"><i data-lucide="message-square" class="w-4 h-4 mr-2 text-blue-500"></i> 用户对话/Agent调用</div>
+              <div onclick="showToast('已选中定时任务组件', 'info')" class="bg-gray-50 border border-gray-200 rounded p-2 text-sm flex items-center mt-2 cursor-pointer hover:border-indigo-400 hover:shadow-sm transition-all"><i data-lucide="clock" class="w-4 h-4 mr-2 text-amber-500"></i> 定时调度触发 (Cron)</div>
+            </div>
+            <div>
+              <div class="text-xs text-gray-400 mb-2 uppercase font-semibold">Agents & Tools</div>
+              <div onclick="showToast('已选中规则校验 Agent', 'info')" class="bg-indigo-50 border border-indigo-200 rounded p-2 text-sm flex items-center cursor-pointer text-indigo-900 shadow-sm"><i data-lucide="shield-alert" class="w-4 h-4 mr-2 text-indigo-500"></i> 规则校验 Agent</div>
+              <div onclick="showToast('已选中内部接口', 'info')" class="bg-white border border-gray-200 rounded p-2 text-sm flex items-center mt-2 cursor-pointer hover:border-indigo-400 hover:shadow-sm transition-all"><i data-lucide="database" class="w-4 h-4 mr-2 text-gray-500"></i> QueryTaskConfig</div>
+            </div>
+            <div>
+              <div class="text-xs text-gray-400 mb-2 uppercase font-semibold">Logic</div>
+              <div onclick="showToast('已选中条件分支组件', 'info')" class="bg-gray-50 border border-gray-200 rounded p-2 text-sm flex items-center cursor-pointer hover:border-indigo-400 hover:shadow-sm transition-all"><i data-lucide="git-branch" class="w-4 h-4 mr-2 text-purple-500"></i> IF 条件判断</div>
+              <div onclick="showToast('已选挂起组件 (Wait)', 'info')" class="bg-amber-50 border border-amber-200 rounded p-2 text-sm flex items-center mt-2 cursor-pointer hover:border-amber-400 hover:shadow-sm transition-all"><i data-lucide="pause-circle" class="w-4 h-4 mr-2 text-amber-500"></i> 挂起等待外部审批</div>
+            </div>
+          </div>
+        </div>
+        <!-- 画布节点 -->
+        <div class="flex-1 relative z-10 cursor-crosshair" style="background-image: radial-gradient(#e2e8f0 1px, transparent 1px); background-size: 20px 20px;">
+          <div class="absolute top-4 left-4 bg-white px-3 py-1.5 rounded-md shadow text-sm font-semibold border border-gray-200 flex items-center">
+            <i data-lucide="sitemap" class="w-4 h-4 mr-2 text-gray-500"></i> 固化链路: 上线前资损风险排查 SOP
+          </div>
+          <div class="absolute bottom-4 left-4 bg-white/80 backdrop-blur px-3 py-1.5 rounded-md shadow-sm text-xs font-medium border border-gray-200 text-gray-500 flex items-center">
+            <i data-lucide="info" class="w-3 h-3 mr-1 text-blue-500"></i> Powered by React Flow (模拟演示)
+          </div>
+           
+          <div class="absolute top-[160px] left-[80px] w-48 bg-white rounded-lg shadow-md border-l-4 border-blue-500 hover:shadow-lg transition-shadow cursor-pointer" onclick="openNodeConfig('开始 (宏工具入参)')">
+            <div class="px-3 py-2 border-b border-gray-100 flex items-center text-sm font-bold text-gray-800">
+              <i data-lucide="play-circle" class="w-4 h-4 mr-2 text-blue-500"></i> 开始 (宏工具入参)
+            </div>
+            <div class="p-3 text-xs text-gray-500">接收 Agent 或前台传入的配置参数</div>
+          </div>
+          <div class="absolute top-[80px] left-[500px] w-64 bg-white rounded-lg shadow-lg border border-indigo-200 ring-2 ring-indigo-500/20 cursor-pointer" onclick="openNodeConfig('任务配置解析 Agent')">
+            <div class="px-3 py-2 border-b border-gray-100 flex justify-between items-center text-sm font-bold text-gray-800 bg-indigo-50/50 rounded-t-lg">
+              <span class="flex items-center"><i data-lucide="bot" class="w-4 h-4 mr-2 text-indigo-600"></i> 任务配置解析 Agent</span>
+              <i data-lucide="more-horizontal" class="w-4 h-4 text-gray-400"></i>
+            </div>
+            <div class="p-3">
+              <div class="text-xs bg-gray-100 p-2 rounded text-gray-600 font-mono break-words">提取用户的预算、人群、权益参数...</div>
+            </div>
+          </div>
+          <div class="absolute top-[240px] left-[500px] w-64 bg-white rounded-lg shadow-md border border-gray-200 hover:shadow-lg transition-shadow cursor-pointer" onclick="openNodeConfig('规则校验 Agent')">
+            <div class="px-3 py-2 border-b border-gray-100 flex items-center text-sm font-bold text-gray-800">
+              <i data-lucide="shield-alert" class="w-4 h-4 mr-2 text-red-500"></i> 规则校验 Agent
+            </div>
+            <div class="p-3 text-xs text-gray-500">调用风控 API 进行冲突推演</div>
+          </div>
+          <div class="absolute top-[160px] left-[950px] w-48 bg-white rounded-lg shadow-md border-l-4 border-green-500 hover:shadow-lg transition-shadow cursor-pointer" onclick="openNodeConfig('返回结果 (UI)')">
+            <div class="px-3 py-2 border-b border-gray-100 flex items-center text-sm font-bold text-gray-800">
+              <i data-lucide="layout-template" class="w-4 h-4 mr-2 text-green-500"></i> 返回结果 (UI)
+            </div>
+            <div class="p-3 text-xs text-gray-500">输出 JSON Schema 生成前端 GUI 表单</div>
+          </div>
+        </div>
+        <!-- 右侧节点参数映射面板 (默认隐藏) -->
+        <div id="node-config-panel" class="w-80 bg-white border-l border-gray-200 shadow-xl flex flex-col transform transition-transform duration-300 translate-x-full absolute right-0 top-0 h-full z-20">
+          <div class="px-4 py-3 border-b border-gray-200 flex justify-between items-center bg-gray-50">
+            <h3 class="text-sm font-bold text-gray-800 flex items-center">
+              <i data-lucide="settings-2" class="w-4 h-4 mr-2 text-indigo-500"></i> <span id="node-config-title">节点配置</span>
+            </h3>
+            <button onclick="closeNodeConfig()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-4 h-4"></i></button>
+          </div>
+          <div class="p-4 flex-1 overflow-y-auto space-y-5">
+            <div>
+              <label class="block text-xs font-bold text-gray-500 uppercase mb-2">输入参数映射 (Input Mapping)</label>
+              <div class="space-y-2 bg-gray-50 p-3 rounded border border-gray-200">
+                <div class="flex justify-between items-center text-sm">
+                  <span class="font-mono text-xs text-gray-700">task_id</span>
+                  <i data-lucide="arrow-left" class="w-3 h-3 text-gray-400"></i>
+                  <select class="text-xs border border-gray-300 rounded px-1 py-1 w-32 outline-none"><option>Start.task_id</option><option>Agent1.result_id</option></select>
+                </div>
+                <div class="flex justify-between items-center text-sm">
+                  <span class="font-mono text-xs text-gray-700">user_input</span>
+                  <i data-lucide="arrow-left" class="w-3 h-3 text-gray-400"></i>
+                  <select class="text-xs border border-gray-300 rounded px-1 py-1 w-32 outline-none"><option>System.query</option></select>
+                </div>
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-gray-500 uppercase mb-2">输出变量 (Output Variables)</label>
+              <div class="bg-gray-50 p-3 rounded border border-gray-200 font-mono text-xs text-gray-600 space-y-1">
+                <div><span class="text-indigo-500">out.</span>status_code</div>
+                <div><span class="text-indigo-500">out.</span>risk_level</div>
+                <div><span class="text-indigo-500">out.</span>reason</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- ==================== 4. 监控与调度大盘 Tab ==================== -->
+    <div id="page-dashboard" class="page-view hidden flex-1 flex flex-col bg-gray-100 overflow-y-auto">
+      <div class="p-6 max-w-7xl mx-auto w-full space-y-6">
+        <div class="flex justify-between items-end">
+          <div>
+            <h2 class="text-2xl font-bold text-gray-800 tracking-tight">监控与调度大盘 (Dashboard)</h2>
+            <p class="text-sm text-gray-500 mt-1">全局掌控大模型消耗、系统健康度与 AI 托管任务状态。</p>
+          </div>
+          <div class="flex bg-white rounded-md shadow-sm border border-gray-200 p-1" id="dash-time-toggles">
+            <button onclick="toggleDashTime(this, '今日')" class="px-3 py-1 text-xs font-medium bg-gray-100 rounded text-gray-800 transition-colors">今日</button>
+            <button onclick="toggleDashTime(this, '本周')" class="px-3 py-1 text-xs font-medium text-gray-500 hover:text-gray-800 rounded transition-colors">本周</button>
+          </div>
+        </div>
+        <!-- KPI 卡片区 -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col">
+            <span class="text-sm font-medium text-gray-500 mb-1 flex justify-between">大模型 API 调用总量 <i data-lucide="activity" class="w-4 h-4 text-gray-400"></i></span>
+            <span class="text-3xl font-bold text-gray-900">45.2k</span>
+            <span class="text-xs text-green-500 mt-2 flex items-center font-medium"><i data-lucide="trending-up" class="w-3 h-3 mr-1"></i> +12.5% 较昨日</span>
+          </div>
+          <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col">
+            <span class="text-sm font-medium text-gray-500 mb-1 flex justify-between">Token 消耗估算 (USD) <i data-lucide="coins" class="w-4 h-4 text-gray-400"></i></span>
+            <span class="text-3xl font-bold text-gray-900">$ 124.5</span>
+            <span class="text-xs text-red-500 mt-2 flex items-center font-medium"><i data-lucide="trending-down" class="w-3 h-3 mr-1 transform rotate-180"></i> -5.2% 较昨日</span>
+          </div>
+          <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col relative overflow-hidden">
+            <div class="absolute right-0 bottom-0 opacity-10"><i data-lucide="cpu" class="w-24 h-24 text-blue-500"></i></div>
+            <span class="text-sm font-medium text-gray-500 mb-1 flex justify-between relative z-10">活跃运行托管任务 <i data-lucide="clock" class="w-4 h-4 text-gray-400"></i></span>
+            <span class="text-3xl font-bold text-blue-600 relative z-10" id="task-count">1,208</span>
+            <span class="text-xs text-gray-500 mt-2 relative z-10">占用 4 个调度队列资源</span>
+          </div>
+          <div class="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col">
+            <span class="text-sm font-medium text-gray-500 mb-1 flex justify-between">意图识别/调度成功率 <i data-lucide="target" class="w-4 h-4 text-gray-400"></i></span>
+            <span class="text-3xl font-bold text-emerald-600">99.2%</span>
+            <span class="text-xs text-red-500 mt-2 font-medium">触发 Max-Steps 熔断: 14 次</span>
+          </div>
+        </div>
+        <!-- 图表与列表区 -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div class="lg:col-span-2 bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col">
+            <h3 class="font-bold text-gray-800 mb-4">本周 Token 消耗趋势</h3>
+            <div class="flex-1 flex items-end justify-between space-x-2 pt-4 border-b border-gray-100 pb-2 relative">
+              <div class="absolute w-full border-t border-dashed border-gray-200 bottom-[25%]"></div>
+              <div class="absolute w-full border-t border-dashed border-gray-200 bottom-[50%]"></div>
+              <div class="absolute w-full border-t border-dashed border-gray-200 bottom-[75%]"></div>
+              <div class="w-1/7 bg-indigo-100 rounded-t-sm h-[40%] relative group hover:bg-indigo-200 transition-colors"><div class="absolute -top-6 w-full text-center opacity-0 group-hover:opacity-100 text-xs font-bold text-indigo-600 transition-opacity">40k</div></div>
+              <div class="w-1/7 bg-indigo-500 rounded-t-sm h-[65%] relative group"><div class="absolute -top-6 w-full text-center text-xs font-bold text-indigo-600">65k</div></div>
+              <div class="w-1/7 bg-indigo-100 rounded-t-sm h-[45%] relative group hover:bg-indigo-200 transition-colors"></div>
+              <div class="w-1/7 bg-indigo-100 rounded-t-sm h-[80%] relative group hover:bg-indigo-200 transition-colors"></div>
+              <div class="w-1/7 bg-indigo-100 rounded-t-sm h-[50%] relative group hover:bg-indigo-200 transition-colors"></div>
+              <div class="w-1/7 bg-indigo-100 rounded-t-sm h-[70%] relative group hover:bg-indigo-200 transition-colors"></div>
+              <div class="w-1/7 bg-indigo-100 rounded-t-sm h-[30%] relative group hover:bg-indigo-200 transition-colors"></div>
+            </div>
+            <div class="flex justify-between text-xs text-gray-400 mt-2 px-2">
+              <span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span>周六</span><span>周日</span>
+            </div>
+          </div>
+          <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 flex flex-col">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="font-bold text-gray-800">高频 AI 托管任务 (Cron)</h3>
+              <button onclick="switchTab('cron-list')" class="text-xs text-primary hover:underline">查看全部</button>
+            </div>
+            <div class="space-y-3 flex-1 overflow-y-auto pr-1">
+              <div class="p-3 border border-gray-100 rounded-lg bg-gray-50 flex flex-col relative overflow-hidden transition-all duration-300">
+                <div class="absolute left-0 top-0 bottom-0 w-1 bg-green-500"></div>
+                <div class="flex justify-between items-start">
+                  <span class="text-sm font-medium text-gray-800 truncate">五一大促全盘数据早报</span>
+                  <button onclick="killTask(this)" class="text-red-500 hover:text-red-700 bg-red-50 px-2 py-0.5 rounded text-[10px] font-semibold transition-colors flex-shrink-0">KILL 强制终止</button>
+                </div>
+                <div class="text-xs text-gray-500 mt-1 flex justify-between">
+                  <span>创建者: u_zhangsan</span><span>每日 09:00</span>
+                </div>
+              </div>
+              <div class="p-3 border border-gray-100 rounded-lg bg-gray-50 flex flex-col relative overflow-hidden transition-all duration-300">
+                <div class="absolute left-0 top-0 bottom-0 w-1 bg-amber-500"></div>
+                <div class="flex justify-between items-start">
+                  <span class="text-sm font-medium text-gray-800 truncate">母婴专区异常日志巡检</span>
+                  <button onclick="killTask(this)" class="text-red-500 hover:text-red-700 bg-red-50 px-2 py-0.5 rounded text-[10px] font-semibold transition-colors flex-shrink-0">KILL 强制终止</button>
+                </div>
+                <div class="text-xs text-gray-500 mt-1 flex justify-between">
+                  <span>创建者: u_lisi</span><span><span class="text-amber-500 font-medium">排队延迟中 (Jitter)</span></span>
+                </div>
+              </div>
+              <div class="p-3 border border-gray-100 rounded-lg bg-gray-50 flex flex-col relative overflow-hidden transition-all duration-300">
+                <div class="absolute left-0 top-0 bottom-0 w-1 bg-green-500"></div>
+                <div class="flex justify-between items-start">
+                  <span class="text-sm font-medium text-gray-800 truncate">签到活动资损盯盘</span>
+                  <button onclick="killTask(this)" class="text-red-500 hover:text-red-700 bg-red-50 px-2 py-0.5 rounded text-[10px] font-semibold transition-colors flex-shrink-0">KILL 强制终止</button>
+                </div>
+                <div class="text-xs text-gray-500 mt-1 flex justify-between">
+                  <span>创建者: u_wangwu</span><span>每 30 分钟</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- ==================== 5. 定时调度管理 Tab (一级列表页) ==================== -->
+    <div id="page-cron-list" class="page-view hidden flex-1 flex flex-col bg-gray-50">
+      <div class="p-6 border-b border-gray-200 bg-white flex justify-between items-center shadow-sm z-10">
+        <div>
+          <h2 class="text-xl font-bold text-gray-800">定时调度管理 (Cron Scheduler)</h2>
+          <p class="text-sm text-gray-500 mt-1">管理全平台所有后台驻留的 AI 自动化任务，统一分配并发资源。</p>
+        </div>
+        <button onclick="showToast('正在打开新建定时任务面板...', 'info'); setTimeout(() => switchTab('cron-editor'), 500)" class="px-4 py-2 text-sm text-white bg-primary rounded-md hover:bg-primary-hover shadow-sm flex items-center transition-colors">
+          <i data-lucide="plus" class="w-4 h-4 mr-2"></i> 新建调度任务
+        </button>
+      </div>
+       
+      <div class="p-6 flex-1 overflow-auto">
+        <div class="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+          <div class="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+            <div class="flex space-x-2">
+              <select class="text-sm border border-gray-300 rounded px-3 py-1.5 outline-none"><option>所有状态</option><option>运行中</option><option>已暂停</option></select>
+              <input type="text" placeholder="搜索任务名/创建者..." class="text-sm border border-gray-300 rounded px-3 py-1.5 outline-none w-64">
+            </div>
+          </div>
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-200">
+                <th class="px-6 py-3 font-medium">任务名称</th>
+                <th class="px-6 py-3 font-medium">绑定 Agent / SOP</th>
+                <th class="px-6 py-3 font-medium">触发规则 (Cron)</th>
+                <th class="px-6 py-3 font-medium">状态</th>
+                <th class="px-6 py-3 font-medium">创建人</th>
+                <th class="px-6 py-3 font-medium text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 text-sm">
+              <tr class="hover:bg-gray-50 transition-colors">
+                <td class="px-6 py-4 font-medium text-gray-800">五一大促全盘数据早报</td>
+                <td class="px-6 py-4 flex items-center"><i data-lucide="bot" class="w-4 h-4 mr-1 text-emerald-500"></i> 数据分析师</td>
+                <td class="px-6 py-4 font-mono text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded inline-block">0 9 * * * (每日 9:00)</td>
+                <td class="px-6 py-4"><span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs">运行中</span></td>
+                <td class="px-6 py-4 text-gray-500">u_zhangsan</td>
+                <td class="px-6 py-4 text-right text-gray-400 space-x-2">
+                  <button onclick="switchTab('cron-editor')" class="hover:text-primary" title="编辑"><i data-lucide="edit" class="w-4 h-4"></i></button>
+                  <button onclick="showToast('任务已暂停', 'warning')" class="hover:text-amber-500" title="暂停"><i data-lucide="pause-circle" class="w-4 h-4"></i></button>
+                  <button onclick="switchTab('session-list')" class="hover:text-primary" title="查看执行日志"><i data-lucide="history" class="w-4 h-4"></i></button>
+                </td>
+              </tr>
+              <tr class="hover:bg-gray-50 transition-colors">
+                <td class="px-6 py-4 font-medium text-gray-800">母婴专区异常日志巡检</td>
+                <td class="px-6 py-4 flex items-center"><i data-lucide="sitemap" class="w-4 h-4 mr-1 text-indigo-500"></i> 上线前排查 SOP</td>
+                <td class="px-6 py-4 font-mono text-xs text-gray-600 bg-gray-100 px-2 py-1 rounded inline-block">0 * * * * (每小时)</td>
+                <td class="px-6 py-4"><span class="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-xs">排队延迟中</span></td>
+                <td class="px-6 py-4 text-gray-500">u_lisi</td>
+                <td class="px-6 py-4 text-right text-gray-400 space-x-2">
+                  <button onclick="switchTab('cron-editor')" class="hover:text-primary" title="编辑"><i data-lucide="edit" class="w-4 h-4"></i></button>
+                  <button onclick="showToast('任务已暂停', 'warning')" class="hover:text-amber-500" title="暂停"><i data-lucide="pause-circle" class="w-4 h-4"></i></button>
+                  <button onclick="switchTab('session-list')" class="hover:text-primary" title="查看执行日志"><i data-lucide="history" class="w-4 h-4"></i></button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+       
+      <!-- 调度管理：分页组件 -->
+      <div class="px-6 py-4 border-t border-gray-200 bg-white flex items-center justify-between flex-shrink-0 z-10">
+        <div class="text-sm text-gray-500">显示第 <span class="font-medium text-gray-900">1</span> 到 <span class="font-medium text-gray-900">10</span> 条，共 <span class="font-medium text-gray-900">156</span> 条记录</div>
+        <div class="flex items-center space-x-1">
+          <button class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-400 bg-gray-50 cursor-not-allowed">上一页</button>
+          <button class="px-3 py-1 text-sm border border-indigo-500 rounded text-indigo-600 bg-indigo-50 font-medium">1</button>
+          <button onclick="showToast('正在加载第 2 页数据...', 'info')" class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-600 bg-white hover:bg-gray-50 transition-colors">2</button>
+          <button onclick="showToast('正在加载第 3 页数据...', 'info')" class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-600 bg-white hover:bg-gray-50 transition-colors">3</button>
+          <span class="text-gray-400 px-2">...</span>
+          <button onclick="showToast('正在加载第 16 页数据...', 'info')" class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-600 bg-white hover:bg-gray-50 transition-colors">16</button>
+          <button onclick="showToast('正在加载下一页数据...', 'info')" class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-600 bg-white hover:bg-gray-50 transition-colors">下一页</button>
+        </div>
+      </div>
+    </div>
+    <!-- ==================== 5.1 定时调度编辑器 (二级页面) ==================== -->
+    <div id="page-cron-editor" class="page-view hidden flex-1 flex flex-col bg-gray-50">
+      <div class="h-12 bg-white border-b border-gray-200 flex items-center justify-between px-4 flex-shrink-0 shadow-sm">
+        <div class="flex items-center text-sm text-gray-600">
+          <button onclick="switchTab('cron-list')" class="hover:text-primary transition-colors font-medium text-gray-500 flex items-center">
+            <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> 返回调度列表
+          </button>
+          <span class="mx-3 border-l border-gray-300 h-4"></span>
+          <i data-lucide="clock" class="w-4 h-4 mr-1.5 text-indigo-500"></i>
+          <span class="font-bold text-gray-900">配置调度任务: 五一大促全盘数据早报</span>
+        </div>
+        <button onclick="showToast('调度任务保存成功', 'success'); setTimeout(()=>switchTab('cron-list'), 800)" class="px-4 py-1.5 text-sm text-white bg-primary rounded hover:bg-primary-hover transition-colors shadow-sm flex items-center">
+          <i data-lucide="save" class="w-4 h-4 mr-1"></i> 保存并启用
+        </button>
+      </div>
+      <div class="flex-1 overflow-auto p-6 flex justify-center">
+        <div class="w-full max-w-3xl bg-white border border-gray-200 rounded-xl shadow-sm p-8 space-y-6">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">任务名称</label>
+            <input type="text" value="五一大促全盘数据早报" class="w-full text-sm border border-gray-300 rounded-md px-3 py-2 outline-none focus:border-primary focus:ring-1 focus:ring-primary">
+          </div>
+          <div class="grid grid-cols-2 gap-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">触发规则 (Cron Expression)</label>
+              <input type="text" value="0 9 * * *" class="w-full text-sm font-mono bg-gray-50 border border-gray-300 rounded-md px-3 py-2 outline-none focus:border-primary focus:ring-1 focus:ring-primary">
+              <p class="text-xs text-gray-500 mt-1">解析: 每天上午 09:00:00 执行</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">防雪崩抖动 (Jitter)</label>
+              <select class="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white outline-none">
+                <option>0 - 15 分钟内随机错峰</option><option>无抖动 (绝对整点)</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">执行载体 (Target Agent/SOP)</label>
+            <select class="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white outline-none">
+              <option>Agent: 营销数据分析师</option>
+              <option>SOP: 上线前资损排查流</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">默认注入指令 (System User Input)</label>
+            <textarea class="w-full text-sm border border-gray-300 rounded-md px-3 py-2 outline-none focus:border-primary focus:ring-1 focus:ring-primary min-h-[80px] resize-none">帮我拉取昨天“五一母婴专区”的所有任务消耗数据，并重点标出 ROI 跌破 1.5 的活动，最后通过企微发给我。</textarea>
+          </div>
+          <div class="grid grid-cols-2 gap-6 pt-4 border-t border-gray-100">
+            <div>
+              <span class="block text-sm font-medium text-gray-700 mb-1">异常重试策略 (Retry Policy)</span>
+              <select class="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white outline-none">
+                <option>失败后重试 3 次 (间隔 5 分钟)</option>
+                <option>不重试，直接抛出异常</option>
+                <option>无限制重试 (危险)</option>
+              </select>
+            </div>
+            <div>
+              <span class="block text-sm font-medium text-gray-700 mb-1">失败兜底动作 (Fallback)</span>
+              <select class="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white outline-none">
+                <option>发送企微告警给创建人</option>
+                <option>静默失败</option>
+              </select>
+            </div>
+          </div>
+          <div class="pt-4 border-t border-gray-100 flex items-center justify-between">
+            <div>
+              <span class="block text-sm font-medium text-gray-700">超时自动终止 (Timeout)</span>
+              <span class="text-xs text-gray-500">防止任务死循环长时间占用资源</span>
+            </div>
+            <div class="flex items-center">
+              <input type="number" value="300" class="w-24 text-sm border border-gray-300 rounded-md px-3 py-1.5 text-center outline-none focus:border-primary focus:ring-1 focus:ring-primary"> 
+              <span class="text-sm text-gray-500 ml-2">秒</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- ==================== 6. 会话审计日志 Tab (一级列表页) ==================== -->
+    <div id="page-session-list" class="page-view hidden flex-1 flex flex-col bg-white">
+      <div class="p-6 border-b border-gray-200 bg-gray-50/50 flex justify-between items-center">
+        <div>
+          <h2 class="text-xl font-bold text-gray-800">会话审计日志 (Trace Logs)</h2>
+          <p class="text-sm text-gray-500 mt-1">全链路追踪每一次交互的底层 ReAct 思考、API 调用入参及流转状态。</p>
+        </div>
+      </div>
+       
+      <div class="p-6 flex-1 overflow-auto bg-white">
+        <div class="flex space-x-4 mb-4">
+          <input type="text" placeholder="搜索 Session ID / User ID..." class="w-64 text-sm border border-gray-300 rounded-md px-3 py-2 outline-none focus:ring-1 focus:ring-primary">
+          <select class="text-sm border border-gray-300 rounded-md px-3 py-2 outline-none bg-white"><option>所有触发源</option><option>LUI 对话框</option><option>Cron 自动触发</option></select>
+          <select class="text-sm border border-gray-300 rounded-md px-3 py-2 outline-none bg-white"><option>所有状态</option><option>已完成</option><option>已挂起 (Wait)</option><option>异常中断</option></select>
+        </div>
+         
+        <div class="border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider border-b border-gray-200">
+                <th class="px-6 py-3 font-medium">Session ID / 触发源</th>
+                <th class="px-6 py-3 font-medium">首轮意图 / 初始 Query</th>
+                <th class="px-6 py-3 font-medium">状态</th>
+                <th class="px-6 py-3 font-medium">触发时间</th>
+                <th class="px-6 py-3 font-medium text-right">消耗/耗时</th>
+                <th class="px-6 py-3 font-medium text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 text-sm">
+              <!-- 记录 1 -->
+              <tr class="hover:bg-gray-50 transition-colors">
+                <td class="px-6 py-4">
+                  <div class="font-mono text-indigo-600 font-medium">sess_98fa21bc</div>
+                  <div class="text-xs text-gray-500 mt-1 flex items-center"><i data-lucide="message-square" class="w-3 h-3 mr-1"></i> 用户: u_lin (LUI)</div>
+                </td>
+                <td class="px-6 py-4">
+                  <div class="text-gray-800 font-medium line-clamp-1">查一下用户 188xxxx 的发奖失败原因，补发一下。</div>
+                  <div class="text-xs text-gray-500 mt-1">包含 2 轮对话流转</div>
+                </td>
+                <td class="px-6 py-4"><span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs border border-green-200">已完成</span></td>
+                <td class="px-6 py-4 text-gray-500 text-xs">2024-05-12 10:01:23</td>
+                <td class="px-6 py-4 text-right">
+                  <div class="text-gray-800 font-medium">4,250 tk</div>
+                  <div class="text-xs text-gray-500 mt-1">8.4s</div>
+                </td>
+                <td class="px-6 py-4 text-right">
+                  <button onclick="openSessionDetail('sess_98fa21bc')" class="text-primary hover:text-primary-hover font-medium bg-indigo-50 px-3 py-1 rounded transition-colors">查看链路脑电图</button>
+                </td>
+              </tr>
+              <!-- 记录 2 -->
+              <tr class="hover:bg-gray-50 transition-colors">
+                <td class="px-6 py-4">
+                  <div class="font-mono text-indigo-600 font-medium">sess_cron_8x92a</div>
+                  <div class="text-xs text-gray-500 mt-1 flex items-center"><i data-lucide="clock" class="w-3 h-3 mr-1"></i> Cron: 每日早报</div>
+                </td>
+                <td class="px-6 py-4">
+                  <div class="text-gray-800 font-medium line-clamp-1">[System Auto] 执行数据巡检与分发</div>
+                </td>
+                <td class="px-6 py-4"><span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs border border-red-200">异常中断</span></td>
+                <td class="px-6 py-4 text-gray-500 text-xs">2024-05-12 09:02:11</td>
+                <td class="px-6 py-4 text-right">
+                  <div class="text-gray-800 font-medium">1,100 tk</div>
+                  <div class="text-xs text-red-500 mt-1">超时熔断</div>
+                </td>
+                <td class="px-6 py-4 text-right">
+                  <button onclick="showToast('正在加载异常诊断数据...', 'info'); setTimeout(()=>openSessionDetail('sess_cron_8x92a'), 500)" class="text-primary hover:text-primary-hover font-medium bg-indigo-50 px-3 py-1 rounded transition-colors">查看链路脑电图</button>
+                </td>
+              </tr>
+              <!-- 记录 3 -->
+              <tr class="hover:bg-gray-50 transition-colors">
+                <td class="px-6 py-4">
+                  <div class="font-mono text-indigo-600 font-medium">sess_77ab19fe</div>
+                  <div class="text-xs text-gray-500 mt-1 flex items-center"><i data-lucide="message-square" class="w-3 h-3 mr-1"></i> 用户: u_zhang (LUI)</div>
+                </td>
+                <td class="px-6 py-4">
+                  <div class="text-gray-800 font-medium line-clamp-1">新建五一拉新任务，预算5万</div>
+                </td>
+                <td class="px-6 py-4"><span class="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-xs border border-amber-200 flex items-center w-max"><i data-lucide="pause-circle" class="w-3 h-3 mr-1"></i> 已挂起 (等待 OA)</span></td>
+                <td class="px-6 py-4 text-gray-500 text-xs">2024-05-12 08:15:00</td>
+                <td class="px-6 py-4 text-right">
+                  <div class="text-gray-800 font-medium">8,920 tk</div>
+                  <div class="text-xs text-amber-500 mt-1">挂起耗时 2h+</div>
+                </td>
+                <td class="px-6 py-4 text-right">
+                  <button onclick="openSessionDetail('sess_77ab19fe')" class="text-primary hover:text-primary-hover font-medium bg-indigo-50 px-3 py-1 rounded transition-colors">查看链路脑电图</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+       
+      <!-- 审计日志：分页组件 -->
+      <div class="px-6 py-4 border-t border-gray-200 bg-white flex items-center justify-between flex-shrink-0 z-10">
+        <div class="text-sm text-gray-500">显示第 <span class="font-medium text-gray-900">1</span> 到 <span class="font-medium text-gray-900">20</span> 条，共 <span class="font-medium text-gray-900">2,450</span> 条记录</div>
+        <div class="flex items-center space-x-1">
+          <button class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-400 bg-gray-50 cursor-not-allowed">上一页</button>
+          <button class="px-3 py-1 text-sm border border-indigo-500 rounded text-indigo-600 bg-indigo-50 font-medium">1</button>
+          <button onclick="showToast('正在加载第 2 页数据...', 'info')" class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-600 bg-white hover:bg-gray-50 transition-colors">2</button>
+          <button onclick="showToast('正在加载第 3 页数据...', 'info')" class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-600 bg-white hover:bg-gray-50 transition-colors">3</button>
+          <span class="text-gray-400 px-2">...</span>
+          <button onclick="showToast('正在加载第 123 页数据...', 'info')" class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-600 bg-white hover:bg-gray-50 transition-colors">123</button>
+          <button onclick="showToast('正在加载下一页数据...', 'info')" class="px-3 py-1 text-sm border border-gray-200 rounded text-gray-600 bg-white hover:bg-gray-50 transition-colors">下一页</button>
+        </div>
+      </div>
+    </div>
+    <!-- ==================== 6.1 会话详情/脑电图 (二级页面) ==================== -->
+    <div id="page-session-detail" class="page-view hidden flex-1 flex flex-col bg-gray-50">
+      <!-- Header -->
+      <div class="h-14 bg-white border-b border-gray-200 flex items-center justify-between px-4 flex-shrink-0 shadow-sm z-10">
+        <div class="flex items-center">
+          <button onclick="switchTab('session-list')" class="text-gray-500 hover:text-primary transition-colors flex items-center font-medium text-sm">
+            <i data-lucide="arrow-left" class="w-4 h-4 mr-1"></i> 返回审计列表
+          </button>
+          <span class="mx-3 border-l border-gray-300 h-4"></span>
+          <h2 class="font-mono font-bold text-gray-800 text-lg flex items-center">
+            <i data-lucide="activity" class="w-5 h-5 mr-2 text-indigo-500"></i> sess_98fa21bc
+          </h2>
+          <span class="ml-3 bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-semibold border border-green-200">执行成功</span>
+        </div>
+        <div class="flex space-x-6 text-sm">
+          <div class="flex flex-col items-end"><span class="text-gray-400 text-[10px] uppercase">总 Tokens</span><span class="font-bold text-gray-800 font-mono">4,250</span></div>
+          <div class="flex flex-col items-end"><span class="text-gray-400 text-[10px] uppercase">执行模型</span><span class="font-bold text-gray-800">Gemini 1.5 Pro</span></div>
+          <div class="flex flex-col items-end"><span class="text-gray-400 text-[10px] uppercase">总流转耗时</span><span class="font-bold text-gray-800 font-mono">8.4s</span></div>
+        </div>
+      </div>
+      <!-- 主体双栏布局 -->
+      <div class="flex-1 flex overflow-hidden">
+        <!-- 左栏：多轮对话回溯 (Chat Context) -->
+        <div class="w-1/3 bg-white border-r border-gray-200 flex flex-col z-0 shadow-lg">
+          <div class="p-3 border-b border-gray-100 bg-gray-50 font-semibold text-gray-700 text-sm flex justify-between items-center">
+            <span>多轮上下文还原 (Context)</span>
+            <span class="text-xs font-normal text-gray-500">2 Turns</span>
+          </div>
+          <div class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/50">
+            <!-- Turn 1 -->
+            <div id="turn-card-1" onclick="switchTraceTurn(1)" class="cursor-pointer border border-transparent hover:border-indigo-300 bg-white p-3 rounded-lg shadow-sm transition-all relative group opacity-70">
+              <div class="turn-active-indicator absolute -left-1 top-4 bottom-4 w-1 bg-indigo-500 rounded-full hidden"></div>
+              <div class="text-[10px] text-gray-400 mb-2 flex justify-between font-mono"><span class="turn-title">Turn 1</span><span>10:00:01</span></div>
+              <div class="text-sm font-medium text-indigo-900 bg-indigo-50 p-2 rounded mb-2">帮我查一下用户 188xxxx 的发奖失败原因。</div>
+              <div class="text-sm text-gray-600 bg-gray-50 p-2 rounded line-clamp-2">经查，该用户命中了黑名单风控规则，导致积分发放接口拦截...</div>
+            </div>
+            <!-- Turn 2 (Active/Selected) -->
+            <div id="turn-card-2" onclick="switchTraceTurn(2)" class="cursor-pointer border border-indigo-400 ring-2 ring-indigo-500/20 bg-white p-3 rounded-lg shadow-md transition-all relative opacity-100">
+              <div class="turn-active-indicator absolute -left-1 top-4 bottom-4 w-1 bg-indigo-500 rounded-full"></div>
+              <div class="text-[10px] text-gray-400 mb-2 flex justify-between font-mono"><span class="turn-title">Turn 2 (当前查看)</span><span>10:01:23</span></div>
+              <div class="text-sm font-medium text-indigo-900 bg-indigo-50 p-2 rounded mb-2">确实是之前系统误判，帮我走异常通道给他补发 50 元无门槛券。</div>
+              <div class="text-sm text-gray-600 bg-gray-50 p-2 rounded">已拉起补发审批流，当前单号为 OA-2024-991，主管审批后自动到账。</div>
+            </div>
+          </div>
+        </div>
+        <!-- 右栏：单轮详情脑电图 (Agentic Trace Log) -->
+        <div class="w-2/3 bg-darkbg text-gray-300 flex flex-col font-mono text-xs relative">
+          <div class="h-10 border-b border-gray-800 flex items-center px-4 bg-gray-900/80 backdrop-blur z-10 sticky top-0 justify-between">
+            <span id="trace-header-title" class="font-semibold text-indigo-400 flex items-center"><i data-lucide="zap" class="w-4 h-4 mr-2"></i> Turn 2 - 节点流转与推理详情</span>
+            <div class="flex items-center space-x-3 text-[10px]">
+              <span class="flex items-center"><span class="w-2 h-2 rounded-full bg-blue-400 mr-1"></span>Router 路由</span>
+              <span class="flex items-center"><span class="w-2 h-2 rounded-full bg-purple-400 mr-1"></span>Agent 思考</span>
+              <span class="flex items-center"><span class="w-2 h-2 rounded-full bg-amber-400 mr-1"></span>Tool 执行</span>
+            </div>
+          </div>
+           
+          <div id="trace-content-turn2" class="flex-1 overflow-y-auto p-6 dark-scroll space-y-2 relative pb-12">
+            <!-- 步骤 1 -->
+            <div class="trace-item relative pl-8 pb-4 fade-in">
+              <div class="trace-line"></div>
+              <div class="absolute left-0 top-0 w-6 h-6 rounded-full flex items-center justify-center bg-gray-800 border border-gray-700 z-10"><i data-lucide="map" class="w-3 h-3 text-blue-400"></i></div>
+              <div class="border border-gray-800 rounded-md bg-darkcard p-3 shadow-sm">
+                <div class="font-semibold mb-1 text-blue-400 flex justify-between items-center">
+                  <span>[0ms] Router 大脑：意图分发</span>
+                  <span class="text-gray-500 text-[10px]">Match: CompensateSOP</span>
+                </div>
+                <div class="text-gray-400">解析用户输入："帮我走异常通道给他补发 50 元无门槛券"<br>匹配结果：需要走高危写入操作，路由至宏工具 SOP 画布【客诉补发补偿金】</div>
+              </div>
+            </div>
+            <!-- 步骤 2 -->
+            <div class="trace-item relative pl-8 pb-4 fade-in">
+              <div class="trace-line"></div>
+              <div class="absolute left-0 top-0 w-6 h-6 rounded-full flex items-center justify-center bg-gray-800 border border-gray-700 z-10"><i data-lucide="play" class="w-3 h-3 text-amber-400"></i></div>
+              <div class="border border-amber-900/30 rounded-md bg-darkcard p-3 shadow-sm border-l-2 border-l-amber-500">
+                <div class="font-semibold mb-2 text-amber-400 flex justify-between items-center">
+                  <span>[120ms] Action: 唤起宏工具 (SOP Canvas)</span>
+                  <span class="text-gray-500 text-[10px] bg-black/40 px-1 rounded">2.1s</span>
+                </div>
+                <pre class="p-2 bg-black/50 rounded text-[10px] overflow-x-auto text-emerald-300 border border-gray-800"><code>{
+ "tool": "RunCompensateSOP",
+ "auth_token": "Bearer eyJhbGciOiJIUzI...",
+ "parameters": {
+  "user_id": "188xxxx",
+  "amount_cny": 50,
+  "reason": "系统风控误判补偿"
+ }
+}</code></pre>
+              </div>
+            </div>
+            <!-- 步骤 3 (嵌套的工具调用结果) -->
+            <div class="trace-item relative pl-8 pb-4 fade-in">
+              <div class="trace-line"></div>
+              <div class="absolute left-0 top-0 w-6 h-6 rounded-full flex items-center justify-center bg-gray-800 border border-gray-700 z-10"><i data-lucide="eye" class="w-3 h-3 text-emerald-400"></i></div>
+              <div class="border border-emerald-900/30 rounded-md bg-darkcard p-3 shadow-sm">
+                <div class="font-semibold mb-2 text-emerald-400 flex justify-between items-center">
+                  <span>[2220ms] Observation: 宏工具执行返回 (从业务系统)</span>
+                  <span class="bg-emerald-900/50 text-emerald-300 px-1 rounded text-[10px]">HTTP 200</span>
+                </div>
+                <pre class="p-2 bg-black/50 rounded text-[10px] overflow-x-auto text-gray-300 border border-gray-800"><code>{
+ "sop_status": "PAUSED_FOR_APPROVAL",
+ "data": {
+  "oa_ticket_id": "OA-2024-991",
+  "approval_node": "财务总监复核",
+  "message": "金额超过免审批阈值(30元)，已发起人工审批流"
+ }
+}</code></pre>
+              </div>
+            </div>
+            <!-- 步骤 4 -->
+            <div class="trace-item relative pl-8 pb-4 fade-in">
+              <div class="absolute left-0 top-0 w-6 h-6 rounded-full flex items-center justify-center bg-gray-800 border border-gray-700 z-10"><i data-lucide="lightbulb" class="w-3 h-3 text-purple-400"></i></div>
+              <div class="border border-gray-800 rounded-md bg-darkcard p-3 shadow-sm">
+                <div class="font-semibold mb-1 text-purple-400 flex justify-between items-center">
+                  <span>[2250ms] LLM Thought (整合输出)</span>
+                </div>
+                <div class="text-gray-400 leading-relaxed italic">"底层宏工具返回了需要审批的状态，单号是 OA-2024-991。我需要将这个结果转化为友好的语言告知用户，并说明补偿未立即到账的原因。"</div>
+              </div>
+            </div>
+          </div>
+          <div id="trace-content-turn1" class="flex-1 overflow-y-auto p-6 dark-scroll space-y-2 relative pb-12 hidden">
+            <div class="trace-item relative pl-8 pb-4 fade-in">
+              <div class="trace-line"></div>
+              <div class="absolute left-0 top-0 w-6 h-6 rounded-full flex items-center justify-center bg-gray-800 border border-gray-700 z-10"><i data-lucide="map" class="w-3 h-3 text-blue-400"></i></div>
+              <div class="border border-gray-800 rounded-md bg-darkcard p-3 shadow-sm">
+                <div class="font-semibold mb-1 text-blue-400 flex justify-between items-center">
+                  <span>[0ms] Router 大脑：意图分发</span>
+                </div>
+                <div class="text-gray-400">解析用户输入："帮我查一下用户 188xxxx 的发奖失败原因。"<br>匹配结果：路由至【发奖核查专员】Agent</div>
+              </div>
+            </div>
+            <div class="trace-item relative pl-8 pb-4 fade-in">
+              <div class="absolute left-0 top-0 w-6 h-6 rounded-full flex items-center justify-center bg-gray-800 border border-gray-700 z-10"><i data-lucide="play" class="w-3 h-3 text-amber-400"></i></div>
+              <div class="border border-amber-900/30 rounded-md bg-darkcard p-3 shadow-sm border-l-2 border-l-amber-500">
+                <div class="font-semibold mb-2 text-amber-400 flex justify-between items-center">
+                  <span>[150ms] Action: Call Tool [QueryTaskConfig]</span>
+                </div>
+                <pre class="p-2 bg-black/50 rounded text-[10px] text-emerald-300 border border-gray-800"><code>{"user_id": "188xxxx"}</code></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- ========================================================= -->
+  <!-- 模态框与抽屉区域 (Modals & Drawers)            -->
+  <!-- ========================================================= -->
+  <!-- 1. 导入 Swagger / JSON 弹窗 (Modal) -->
+  <div id="modal-import" class="fixed inset-0 z-50 hidden flex items-center justify-center">
+    <!-- 遮罩层 -->
+    <div class="absolute inset-0 bg-gray-900/60 backdrop-blur-sm transition-opacity" onclick="closeImportModal()"></div>
+    <!-- 弹窗内容 -->
+    <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 flex flex-col transform transition-all fade-in">
+      <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+        <h3 class="text-lg font-bold text-gray-900">导入 API 资产</h3>
+        <button onclick="closeImportModal()" class="text-gray-400 hover:text-gray-600 transition-colors">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+       
+      <div class="p-6">
+        <div class="flex p-1 bg-gray-100 rounded-lg mb-6">
+          <button class="flex-1 py-1.5 text-sm font-medium bg-white text-gray-900 rounded-md shadow-sm">上传文件</button>
+          <button class="flex-1 py-1.5 text-sm font-medium text-gray-500 hover:text-gray-700" onclick="showToast('URL 导入模式暂未开启', 'info')">通过 URL 导入</button>
+        </div>
+        <div class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:bg-gray-50 hover:border-indigo-400 transition-colors cursor-pointer group" onclick="simulateFileUpload()">
+          <div class="w-12 h-12 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition-transform">
+            <i data-lucide="upload-cloud" class="w-6 h-6"></i>
+          </div>
+          <p class="text-sm font-medium text-gray-800 mb-1">点击或拖拽文件到此处</p>
+          <p class="text-xs text-gray-500">支持 Swagger 2.0, OpenAPI 3.0 的 JSON 或 YAML 格式文件</p>
+        </div>
+         
+        <div id="upload-progress" class="hidden mt-4">
+          <div class="flex justify-between text-xs text-gray-600 mb-1">
+            <span>正在解析 API 接口...</span>
+            <span>100%</span>
+          </div>
+          <div class="w-full bg-gray-200 rounded-full h-1.5">
+            <div class="bg-indigo-600 h-1.5 rounded-full" style="width: 100%"></div>
+          </div>
+        </div>
+      </div>
+      <div class="px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-xl flex justify-end space-x-3">
+        <button onclick="closeImportModal()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500">
+          取消
+        </button>
+        <button id="btn-import-confirm" onclick="confirmImport()" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500 flex items-center opacity-50 cursor-not-allowed" disabled>
+          确认导入
+        </button>
+      </div>
+    </div>
+  </div>
+  <!-- 2. 新建/编辑 技能抽屉 (Drawer) -->
+  <div id="drawer-skill" class="fixed inset-0 z-50 hidden flex justify-end">
+    <!-- 遮罩层 -->
+    <div class="absolute inset-0 bg-gray-900/40 backdrop-blur-sm transition-opacity" onclick="closeSkillDrawer()"></div>
+    <!-- 抽屉内容 -->
+    <div id="drawer-panel" class="relative w-full max-w-xl bg-white h-full shadow-2xl flex flex-col transform transition-transform duration-300 drawer-slide-out">
+       
+      <div class="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50 flex-shrink-0">
+        <h3 id="drawer-title" class="text-lg font-bold text-gray-900 flex items-center">
+          <i data-lucide="plus-square" class="w-5 h-5 mr-2 text-indigo-500"></i> 新建原子技能
+        </h3>
+        <button onclick="closeSkillDrawer()" class="text-gray-400 hover:text-gray-600 transition-colors">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto p-6 space-y-6">
+        <div>
+          <h4 class="text-sm font-bold text-gray-800 mb-4 flex items-center"><span class="w-1.5 h-4 bg-indigo-500 rounded-sm mr-2"></span> 基础标识</h4>
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">技能名称 (Skill Name) <span class="text-red-500">*</span></label>
+              <input type="text" id="skill-name" placeholder="例如：QueryUserInfo" class="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-1 focus:ring-indigo-500 outline-none">
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">业务描述 (给大模型看) <span class="text-red-500">*</span></label>
+              <textarea id="skill-desc" rows="2" placeholder="详细描述该接口的作用，大模型将根据此描述决定是否调用该技能。" class="w-full text-sm border border-gray-300 rounded-md px-3 py-2 focus:ring-1 focus:ring-indigo-500 outline-none resize-none"></textarea>
+            </div>
+          </div>
+        </div>
+        <hr class="border-gray-100">
+        <div>
+          <h4 class="text-sm font-bold text-gray-800 mb-4 flex items-center"><span class="w-1.5 h-4 bg-emerald-500 rounded-sm mr-2"></span> 接口调用规则</h4>
+          <div class="space-y-4">
+            <div class="flex space-x-3">
+              <div class="w-1/3">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Method</label>
+                <select id="skill-method" class="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white focus:ring-1 focus:ring-indigo-500 outline-none">
+                  <option value="GET">GET</option><option value="POST">POST</option><option value="PUT">PUT</option>
+                </select>
+              </div>
+              <div class="w-2/3">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Endpoint URL <span class="text-red-500">*</span></label>
+                <input type="text" id="skill-url" placeholder="https://api.internal.com/v1/..." class="w-full text-sm font-mono border border-gray-300 rounded-md px-3 py-2 focus:ring-1 focus:ring-indigo-500 outline-none">
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">鉴权模式 (Authentication)</label>
+              <select class="w-full text-sm border border-gray-300 rounded-md px-3 py-2 bg-white focus:ring-1 focus:ring-indigo-500 outline-none">
+                <option>User Token 透传 (继承当前操作人权限)</option><option>System AK/SK (后台系统级调用)</option><option>无需鉴权 (公共接口)</option>
+              </select>
+              <p class="text-xs text-gray-500 mt-1">Token 透传模式下，BFF 层会自动向 Header 中注入当前 C 端用户的 Authorization Token。</p>
+            </div>
+          </div>
+        </div>
+        <hr class="border-gray-100">
+        <div>
+          <div class="flex justify-between items-center mb-4">
+            <h4 class="text-sm font-bold text-gray-800 flex items-center"><span class="w-1.5 h-4 bg-amber-500 rounded-sm mr-2"></span> 输入参数 (Schema)</h4>
+            <button onclick="addParamRow()" class="text-xs font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-2 py-1 rounded transition-colors flex items-center">
+              <i data-lucide="plus" class="w-3 h-3 mr-1"></i> 添加参数
+            </button>
+          </div>
+          <div id="param-list" class="space-y-3 bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <div class="flex items-start space-x-2 group">
+              <input type="text" placeholder="参数名 (如 task_id)" class="w-1/3 text-xs font-mono border border-gray-300 rounded px-2 py-1.5 focus:ring-1 focus:ring-indigo-500 outline-none">
+              <select class="w-1/4 text-xs font-mono border border-gray-300 rounded px-2 py-1.5 bg-white focus:ring-1 focus:ring-indigo-500 outline-none">
+                <option>String</option><option>Integer</option><option>Boolean</option>
+              </select>
+              <input type="text" placeholder="参数描述" class="flex-1 text-xs border border-gray-300 rounded px-2 py-1.5 focus:ring-1 focus:ring-indigo-500 outline-none">
+              <button class="text-gray-400 hover:text-red-500 p-1.5 transition-colors" onclick="this.parentElement.remove();"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="px-6 py-4 border-t border-gray-200 bg-white flex justify-end space-x-3 flex-shrink-0">
+        <button onclick="closeSkillDrawer()" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500">取消</button>
+        <button onclick="saveSkill()" class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500 flex items-center shadow-sm">
+          <i data-lucide="save" class="w-4 h-4 mr-1.5"></i> 保存技能配置
+        </button>
+      </div>
+    </div>
+  </div>
+  <!-- ========================================================= -->
+  <!-- 全局交互逻辑脚本                     -->
+  <!-- ========================================================= -->
+  <script>
+    lucide.createIcons();
+    // ========== Toast 反馈系统 ==========
+    function showToast(message, type = 'success') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+       
+      let iconStr, bgClass, textClass;
+      if (type === 'success') {
+        iconStr = '<i data-lucide="check-circle" class="w-5 h-5 text-green-500"></i>';
+        bgClass = 'bg-white border-green-100'; textClass = 'text-gray-800';
+      } else if (type === 'info') {
+        iconStr = '<i data-lucide="info" class="w-5 h-5 text-blue-500"></i>';
+        bgClass = 'bg-white border-blue-100'; textClass = 'text-gray-800';
+      } else if (type === 'warning') {
+        iconStr = '<i data-lucide="alert-triangle" class="w-5 h-5 text-amber-500"></i>';
+        bgClass = 'bg-white border-amber-100'; textClass = 'text-gray-800';
+      }
+      toast.className = `flex items-center p-4 rounded-lg shadow-lg border ${bgClass} ${textClass} min-w-[300px] max-w-sm pointer-events-auto toast-enter`;
+      toast.innerHTML = `<div class="flex-shrink-0 mr-3">${iconStr}</div><div class="text-sm font-medium">${message}</div>`;
+       
+      container.appendChild(toast);
+      lucide.createIcons();
+      setTimeout(() => {
+        toast.classList.replace('toast-enter', 'toast-leave');
+        setTimeout(() => toast.remove(), 300);
+      }, 3000);
+    }
+    // ========== SPA 路由逻辑 ==========
+    function switchTab(tabId) {
+      document.querySelectorAll('.page-view').forEach(el => {
+        el.classList.add('hidden'); el.classList.remove('flex');
+      });
+      document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.classList.remove('text-indigo-700', 'bg-indigo-50', 'active', 'ring-1', 'ring-indigo-200');
+        btn.classList.add('text-gray-500', 'hover:bg-gray-100', 'hover:text-gray-900');
+        const icon = btn.querySelector('.nav-icon');
+        if(icon) { icon.classList.remove('text-indigo-600'); icon.classList.add('text-gray-400'); }
+      });
+      const targetPage = document.getElementById('page-' + tabId);
+      if(targetPage) {
+        targetPage.classList.remove('hidden'); targetPage.classList.add('flex', 'fade-in');
+      }
+      let activeNavId = tabId;
+      if (tabId === 'agent-editor' || tabId === 'agent-list') activeNavId = 'agent-factory';
+      if (tabId === 'workflow-editor') activeNavId = 'workflow-canvas';
+      if (tabId === 'cron-editor') activeNavId = 'cron-list';
+      if (tabId === 'session-detail') activeNavId = 'session-list';
+      const activeBtns = document.querySelectorAll(`.nav-btn[onclick*="${activeNavId}"]`);
+      activeBtns.forEach(btn => {
+        btn.classList.add('text-indigo-700', 'bg-indigo-50', 'active', 'ring-1', 'ring-indigo-200');
+        btn.classList.remove('text-gray-500', 'hover:bg-gray-100', 'hover:text-gray-900');
+        const icon = btn.querySelector('.nav-icon');
+        if(icon) { icon.classList.remove('text-gray-400'); icon.classList.add('text-indigo-600'); }
+      });
+    }
+    // ========== Canvas Editor Node Panel Logic ==========
+    function openNodeConfig(nodeName) {
+      const panel = document.getElementById('node-config-panel');
+      document.getElementById('node-config-title').innerText = `节点配置: ${nodeName}`;
+      panel.classList.remove('translate-x-full');
+    }
+    function closeNodeConfig() {
+      const panel = document.getElementById('node-config-panel');
+      panel.classList.add('translate-x-full');
+    }
+    // ========== Session Audit Log Turn Switching ==========
+    function switchTraceTurn(turnNum) {
+      [1, 2].forEach(n => {
+        const card = document.getElementById(`turn-card-${n}`);
+        const indicator = card.querySelector('.turn-active-indicator');
+        const titleSpan = card.querySelector('.turn-title');
+        if (n === turnNum) {
+          card.classList.add('border-indigo-400', 'ring-2', 'ring-indigo-500/20', 'opacity-100');
+          card.classList.remove('border-transparent', 'opacity-70');
+          indicator.classList.remove('hidden');
+          titleSpan.innerText = `Turn ${n} (当前查看)`;
+        } else {
+          card.classList.remove('border-indigo-400', 'ring-2', 'ring-indigo-500/20', 'opacity-100');
+          card.classList.add('border-transparent', 'opacity-70');
+          indicator.classList.add('hidden');
+          titleSpan.innerText = `Turn ${n}`;
+        }
+      });
+      document.getElementById('trace-header-title').innerHTML = `<i data-lucide="zap" class="w-4 h-4 mr-2"></i> Turn ${turnNum} - 节点流转与推理详情`;
+      document.getElementById('trace-content-turn1').classList.add('hidden');
+      document.getElementById('trace-content-turn2').classList.add('hidden');
+      document.getElementById(`trace-content-turn${turnNum}`).classList.remove('hidden');
+      lucide.createIcons();
+    }
+    function openAgentEditor(agentId) {
+      switchTab('agent-editor');
+      showToast('已进入 Agent 配置开发环境', 'info');
+    }
+    function openCanvasEditor(canvasId) {
+      switchTab('workflow-editor');
+      if (canvasId === 'new') {
+        showToast('已为您初始化全新的 SOP 编排画布', 'success');
+      } else {
+        showToast('已加载 SOP 画布数据', 'info');
+      }
+    }
+     
+    function openSessionDetail(sessionId) {
+      switchTab('session-detail');
+      showToast(`正在加载会话链路数据: ${sessionId}`, 'info');
+    }
+    // ========== 导入 Swagger Modal 逻辑 ==========
+    function openImportModal() {
+      const modal = document.getElementById('modal-import');
+      modal.classList.remove('hidden');
+      document.getElementById('upload-progress').classList.add('hidden');
+      const btn = document.getElementById('btn-import-confirm');
+      btn.disabled = true;
+      btn.classList.add('opacity-50', 'cursor-not-allowed');
+      btn.innerText = '确认导入';
+    }
+    function closeImportModal() {
+      document.getElementById('modal-import').classList.add('hidden');
+    }
+    function simulateFileUpload() {
+      const progress = document.getElementById('upload-progress');
+      progress.classList.remove('hidden');
+      const btn = document.getElementById('btn-import-confirm');
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.classList.remove('opacity-50', 'cursor-not-allowed');
+        btn.innerText = '确认导入 (共解析出 12 个 API)';
+        showToast('文件解析成功', 'success');
+      }, 800);
+    }
+    function confirmImport() {
+      showToast('API 资产导入中...', 'info');
+      setTimeout(() => {
+        closeImportModal();
+        showToast('12 个原子技能已成功导入至注册中心', 'success');
+      }, 1000);
+    }
+    // ========== 技能 Drawer 逻辑 ==========
+    function openSkillDrawer(skillId = null) {
+      const drawer = document.getElementById('drawer-skill');
+      const panel = document.getElementById('drawer-panel');
+       
+      if (skillId) {
+        document.getElementById('drawer-title').innerHTML = `<i data-lucide="edit" class="w-5 h-5 mr-2 text-indigo-500"></i> 编辑原子技能`;
+        document.getElementById('skill-name').value = skillId;
+        document.getElementById('skill-desc').value = skillId === 'QueryTaskConfig' ? '查询指定营销任务的配置规则及库存状态' : '向指定业务群或个人发送企微告警卡片';
+        document.getElementById('skill-method').value = skillId === 'QueryTaskConfig' ? 'GET' : 'POST';
+        document.getElementById('skill-url').value = skillId === 'QueryTaskConfig' ? '/api/v1/task/config' : '/api/v1/notify/send';
+      } else {
+        document.getElementById('drawer-title').innerHTML = `<i data-lucide="plus-square" class="w-5 h-5 mr-2 text-indigo-500"></i> 新建原子技能`;
+        document.getElementById('skill-name').value = '';
+        document.getElementById('skill-desc').value = '';
+        document.getElementById('skill-method').value = 'GET';
+        document.getElementById('skill-url').value = '';
+      }
+      lucide.createIcons();
+      drawer.classList.remove('hidden');
+      setTimeout(() => {
+        panel.classList.remove('drawer-slide-out'); panel.classList.add('drawer-slide-in');
+      }, 10);
+    }
+    function closeSkillDrawer() {
+      const drawer = document.getElementById('drawer-skill');
+      const panel = document.getElementById('drawer-panel');
+      panel.classList.remove('drawer-slide-in'); panel.classList.add('drawer-slide-out');
+      setTimeout(() => { drawer.classList.add('hidden'); }, 300);
+    }
+    function saveSkill() {
+      showToast('正在校验接口 Schema 与连通性...', 'info');
+      setTimeout(() => {
+        closeSkillDrawer(); showToast('技能配置已成功保存并发布', 'success');
+      }, 1200);
+    }
+    function addParamRow() {
+      const list = document.getElementById('param-list');
+      const row = document.createElement('div');
+      row.className = "flex items-start space-x-2 group fade-in";
+      row.innerHTML = `
+        <input type="text" placeholder="参数名" class="w-1/3 text-xs font-mono border border-gray-300 rounded px-2 py-1.5 focus:ring-1 focus:ring-indigo-500 outline-none">
+        <select class="w-1/4 text-xs font-mono border border-gray-300 rounded px-2 py-1.5 bg-white focus:ring-1 focus:ring-indigo-500 outline-none">
+          <option>String</option><option>Integer</option><option>Boolean</option>
+        </select>
+        <input type="text" placeholder="描述" class="flex-1 text-xs border border-gray-300 rounded px-2 py-1.5 focus:ring-1 focus:ring-indigo-500 outline-none">
+        <button class="text-gray-400 hover:text-red-500 p-1.5 transition-colors" onclick="this.parentElement.remove();"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+      `;
+      list.appendChild(row);
+      lucide.createIcons();
+      showToast('已增加一行参数定义', 'info');
+    }
+    // ========== Dashboard 交互 ==========
+    function toggleDashTime(btn, timeLabel) {
+      const parent = btn.parentElement;
+      parent.querySelectorAll('button').forEach(b => {
+        b.className = "px-3 py-1 text-xs font-medium text-gray-500 hover:text-gray-800 rounded transition-colors";
+      });
+      btn.className = "px-3 py-1 text-xs font-medium bg-gray-100 rounded text-gray-800 transition-colors";
+      showToast(`已切换至【${timeLabel}】数据视图`, 'info');
+    }
+    function killTask(btn) {
+      const taskDiv = btn.closest('.relative.overflow-hidden');
+      taskDiv.classList.add('smooth-remove');
+      setTimeout(() => {
+        taskDiv.remove();
+        const countEl = document.getElementById('task-count');
+        countEl.innerText = (parseInt(countEl.innerText.replace(',', '')) - 1).toLocaleString();
+        showToast('已向调度中心下发指令，任务已强制终止', 'success');
+      }, 300);
+    }
+    // ========== 智能体沙盒交互 ==========
+    function saveDraft(btn) {
+      const textEl = btn.querySelector('.btn-text');
+      const originalText = textEl.innerText;
+      textEl.innerText = '保存中...';
+      setTimeout(() => {
+        textEl.innerText = originalText; showToast('草稿保存成功', 'success');
+      }, 800);
+    }
+    function publishAgent(btn) {
+      const textEl = btn.querySelector('.btn-text');
+      textEl.innerText = '发布中...';
+      setTimeout(() => {
+        textEl.innerText = '发布至 Router';
+        document.getElementById('agent-version').innerText = 'v1.3';
+        showToast('新版本 v1.3 已成功发布至 Router 大脑', 'success');
+      }, 1000);
+    }
+    function optimizePrompt() {
+      const promptEl = document.getElementById('system-prompt');
+      promptEl.classList.add('ring-2', 'ring-indigo-400', 'bg-indigo-50/30');
+      showToast('正在调用大模型优化您的提示词...', 'info');
+      setTimeout(() => {
+        promptEl.value += '\n5. 若客诉用户为高净值用户(L4以上)，在建议中需增加优先补偿策略。';
+        promptEl.classList.remove('ring-2', 'ring-indigo-400', 'bg-indigo-50/30');
+        showToast('提示词优化完成，已添加高净值用户处理策略', 'success');
+      }, 1500);
+    }
+    // ========== Agent 核心模拟逻辑 ==========
+    const chatEl = document.getElementById('simulator-chat');
+    const inputEl = document.getElementById('sim-input');
+    const traceEl = document.getElementById('trace-container');
+    let isSimulating = false;
+    function clearChat() {
+      if(isSimulating) return;
+      chatEl.innerHTML = `<div class="flex justify-center"><span class="text-[10px] bg-gray-200/80 text-gray-500 px-3 py-1 rounded-full border border-gray-300">沙盒环境已隔离，Tool 调用将打向测试环境</span></div>`;
+      traceEl.innerHTML = `<div class="text-gray-500 text-center mt-10 italic">等待会话触发...</div>`;
+      showToast('模拟器会话已清空', 'success');
+    }
+    function scrollToBottom(el) { el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' }); }
+    function setTraceStatus(status, isActive) {
+      document.getElementById('trace-status').innerText = status;
+      const ping = document.getElementById('trace-indicator-ping');
+      const dot = document.getElementById('trace-indicator');
+      if(isActive) {
+        ping.classList.remove('hidden'); dot.classList.replace('bg-gray-600', 'bg-green-500');
+      } else {
+        ping.classList.add('hidden'); dot.classList.replace('bg-green-500', 'bg-gray-600');
+      }
+    }
+    function appendChatMsg(role, text) {
+      const div = document.createElement('div');
+      div.className = `flex fade-in ${role === 'user' ? 'justify-end' : 'justify-start'}`;
+      if(role === 'user') {
+        div.innerHTML = `<div class="max-w-[80%] bg-indigo-50 text-indigo-900 text-sm px-4 py-2 rounded-2xl rounded-tr-sm shadow-sm border border-indigo-100">${text}</div>`;
+      } else {
+        div.innerHTML = `
+          <div class="bg-white border border-gray-200 p-1.5 rounded-full mr-2 shadow-sm flex-shrink-0 self-end"><i data-lucide="bot" class="w-4 h-4 text-primary"></i></div>
+          <div class="max-w-[85%] bg-white text-gray-800 text-sm px-4 py-3 rounded-2xl rounded-bl-sm shadow-sm border border-gray-200 leading-relaxed">${text.replace(/\n/g, '<br>')}</div>
+        `;
+      }
+      chatEl.appendChild(div);
+      lucide.createIcons();
+      scrollToBottom(chatEl);
+    }
+    function appendTraceStep(type, title, content = '', delay = 0) {
+      return new Promise(resolve => {
+        setTimeout(() => {
+          if (traceEl.querySelector('.text-center.italic')) traceEl.innerHTML = '';
+          const div = document.createElement('div');
+          div.className = 'trace-item relative pl-6 pb-4 fade-in';
+          let icon, colorClass, contentHtml = '';
+           
+          if (type === 'input') { icon = 'user'; colorClass = 'text-blue-400 bg-blue-400/10 border-blue-400/30'; }
+          else if (type === 'thought') { icon = 'lightbulb'; colorClass = 'text-purple-400 bg-purple-400/10 border-purple-400/30'; }
+          else if (type === 'action') { icon = 'play'; colorClass = 'text-amber-400 bg-amber-400/10 border-amber-400/30'; contentHtml = `<pre class="mt-2 p-2 bg-black/40 rounded text-[10px] overflow-x-auto text-gray-300 border border-gray-800"><code class="text-emerald-300">${content}</code></pre>`; }
+          else if (type === 'observation') { icon = 'eye'; colorClass = 'text-emerald-400 bg-emerald-400/10 border-emerald-400/30'; contentHtml = `<pre class="mt-2 p-2 bg-black/40 rounded text-[10px] overflow-x-auto text-gray-300 border border-gray-800"><code>${content}</code></pre>`; }
+          else if (type === 'output') { icon = 'check-circle'; colorClass = 'text-green-400 bg-green-400/10 border-green-400/30'; contentHtml = `<div class="mt-2 p-2 bg-black/40 rounded text-gray-300 border border-gray-800">${content}</div>`; }
+          else if (type === 'error') { icon = 'alert-triangle'; colorClass = 'text-red-400 bg-red-400/10 border-red-400/30'; }
+          div.innerHTML = `
+            <div class="trace-line"></div>
+            <div class="absolute left-0 top-0 w-6 h-6 rounded-full flex items-center justify-center bg-gray-800 border border-gray-700 z-10">
+              <i data-lucide="${icon}" class="w-3 h-3 ${colorClass.split(' ')[0]}"></i>
+            </div>
+            <div class="border border-gray-800 rounded-md bg-darkcard p-3 shadow-sm">
+              <div class="font-semibold mb-1 flex items-center ${colorClass.split(' ')[0]}">${title}</div>
+              ${type === 'thought' || type === 'input' ? `<div class="text-gray-400 leading-relaxed">${content}</div>` : contentHtml}
+            </div>
+          `;
+          traceEl.appendChild(div);
+          lucide.createIcons();
+          scrollToBottom(traceEl);
+          resolve();
+        }, delay);
+      });
+    }
+    async function runSimulation() {
+      const query = inputEl.value.trim();
+      if (!query || isSimulating) return;
+      isSimulating = true;
+      inputEl.value = ''; inputEl.disabled = true;
+      appendChatMsg('user', query);
+      setTraceStatus('PROCESSING', true);
+      await appendTraceStep('input', 'User Input', `"${query}"`, 100);
+      await appendTraceStep('thought', 'Thought', '用户想要查询活动 1024 的配置和库存情况。我需要调用 QueryTaskConfig 工具来获取这些信息。', 800);
+      await appendTraceStep('action', 'Action: Call Tool', `{\n "tool": "QueryTaskConfig",\n "parameters": {\n  "task_id": "1024"\n }\n}`, 1000);
+       
+      setTraceStatus('AWAITING TOOL', true);
+      await appendTraceStep('observation', 'Observation: Tool Result', `{\n "status": 200,\n "data": {\n  "task_name": "双十一拉新返现",\n  "status": "ONLINE",\n  "budget_total": 50000,\n  "budget_used": 49800,\n  "stock_left": 2,\n  "warning_threshold": 100\n }\n}`, 2000);
+       
+      setTraceStatus('PROCESSING', true);
+      await appendTraceStep('thought', 'Thought', '数据已获取。活动名称是“双十一拉新返现”，状态在线。但发现严重问题：剩余库存仅有 2，且已远低于警戒线 100。我需要汇总这些信息，并提醒用户存在库存耗尽风险。', 1500);
+       
+      const finalOutput = `排查结果如下：\n\n**任务 ID 1024 (双十一拉新返现)** 当前状态为 [在线]。\n\n⚠️ **风险提示：**\n当前消耗进度已达 99.6%（已用 49800 / 总预算 50000），**剩余库存仅有 2 份**，已跌破警戒线。\n\n建议您立即追加预算或暂停任务，以免引发后续客诉。`;
+      await appendTraceStep('output', 'Final Output', '输出最终 Markdown 文本给用户。', 1200);
+       
+      appendChatMsg('ai', finalOutput);
+      setTraceStatus('IDLE', false);
+      inputEl.disabled = false; inputEl.focus();
+      isSimulating = false;
+    }
+    // 初始化加载默认 Tab
+    window.onload = () => {
+      switchTab('agent-factory'); 
+    };
+  </script>
+</body>
+</html>
+

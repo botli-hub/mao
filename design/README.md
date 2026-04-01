@@ -14,6 +14,12 @@
 design/
 ├── README.md                          # 本文件：文档导航索引
 │
+├── 00_prototypes/                     # 原始需求与交互原型（设计输入）
+│   ├── product_requirements.txt       # 产品需求说明
+│   ├── b_side_prototype.html          # B 端管理控制台交互原型
+│   ├── c_side_prototype.html          # C 端 LUI 工作站交互原型
+│   └── api_reference_prototype.html   # API 接口参考原型
+│
 ├── 01_overview/                       # 产品概述与设计原则
 │   └── product_overview.md            # 产品定位、核心原则、技术选型
 │

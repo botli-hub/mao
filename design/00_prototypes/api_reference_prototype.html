@@ -1,0 +1,1393 @@
+<!DOCTYPE html>
+
+<html lang="zh-CN">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>MAO 平台全景 OpenAPI 文档 (v9.0)</title>
+
+<script src="https://cdn.tailwindcss.com"></script>
+
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<script>
+
+tailwind.config = {
+
+theme: {
+
+extend: {
+
+fontFamily: { sans: ['Inter', 'sans-serif'], mono: ['Fira Code', 'monospace'] },
+
+colors: {
+
+get: '#61affe', getbg: '#ebf3fb', getborder: '#61affe',
+
+post: '#49cc90', postbg: '#e8f6f0', postborder: '#49cc90',
+
+put: '#fca130', putbg: '#fbf1e6', putborder: '#fca130',
+
+patch: '#50e3c2', patchbg: '#eafaf6', patchborder: '#50e3c2',
+
+del: '#f93e3e', delbg: '#fae7e7', delborder: '#f93e3e',
+
+dark: '#3b4151', swaggerbg: '#fafafa'
+
+}
+
+}
+
+}
+
+}
+
+</script>
+
+<style>
+
+.api-block { transition: all 0.2s ease; margin-bottom: 0.75rem; border-radius: 0.5rem; overflow: hidden; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);}
+
+.api-content { display: none; border-top-width: 1px;}
+
+.api-block.open .api-content { display: block; animation: slideDown 0.3s ease-out; }
+
+@keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+pre { background-color: #1e293b; color: #e2e8f0; padding: 1rem; border-radius: 0.5rem; overflow-x: auto; font-size: 0.875rem; margin-top: 0.5rem;}
+
+.string { color: #a5d6ff; } .number { color: #79c0ff; } .boolean { color: #ff7b72; } .null { color: #ff7b72; } .key { color: #7ee787; }
+
+.section-title { font-size: 1.5rem; font-weight: bold; color: #1f2937; margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid #e5e7eb; display: flex; align-items: center; margin-top: 2rem;}
+
+.query-param { font-family: 'Fira Code', monospace; font-size: 0.75rem; background-color: #f3f4f6; padding: 0.125rem 0.375rem; border-radius: 0.25rem; color: #4b5563; }
+
+.comment { color: #94a3b8; font-style: italic; }
+
+</style>
+
+</head>
+
+<body class="bg-swaggerbg text-gray-800 font-sans pb-20">
+
+<!-- Header -->
+
+<div class="bg-dark text-white py-5 px-8 shadow-md flex items-center justify-between sticky top-0 z-50">
+
+<div class="flex items-center space-x-4">
+
+<div class="bg-indigo-500 p-2 rounded-full"><svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg></div>
+
+<h1 class="text-2xl font-bold tracking-tight">MAO 全景 OpenAPI (资深研发终审版)</h1>
+
+<span class="bg-red-500 text-xs font-bold px-2 py-1 rounded-full ml-2 text-white">v9.0.0-PROD</span>
+
+</div>
+
+<div class="text-sm text-gray-300 font-mono">Base URL: /api/v1</div>
+
+</div>
+
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+<!-- Info Section -->
+
+<section class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+
+<h2 class="text-xl font-bold mb-3">接口 I/O 深度校验与状态机闭环</h2>
+
+<p class="text-gray-600 text-sm leading-relaxed mb-3">
+
+本文档已经过资深研发 Review。全量补充了高并发场景下的数据防线，包括：Cron 的防重叠队列、Webhook 的防重放签名、GUI 卡片的同步/异步双态响应，以及 DAG 画布的条件分支逻辑。<br>
+
+<strong>鉴权标准：</strong> C 端接口携带 <code>User_JWT</code>，B 端接口携带 <code>Admin_JWT</code>。
+
+</p>
+
+</section>
+
+<!-- ========================================================= -->
+
+<!-- Group 0: C 端交互核心层 (User Workspace) -->
+
+<!-- ========================================================= -->
+
+<section>
+
+<h3 class="section-title"><span class="text-2xl mr-2">💬</span> C 端交互核心层 (User Workspace)</h3>
+
+<!-- GET /chat/sessions -->
+
+<div class="api-block border border-getborder bg-getbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-blue-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-get text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">GET</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/chat/sessions</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">获取左侧边栏：最近会话列表</span>
+
+</div>
+
+<div class="api-content bg-white border-getborder">
+
+<div class="p-5">
+
+<div class="mb-3 text-sm text-gray-600">Query Params: <span class="query-param">page=1</span> <span class="query-param">size=20</span></div>
+
+<pre><code class="language-json">{
+
+"code": 200,
+
+"data": {
+
+"items": [{"session_id": "sess_001", "title": "五一母婴线策划", "updated_at": "2026-05-01T10:24:00Z"}],
+
+"page_info": { "total": 45, "current_page": 1, "has_more": true }
+
+}
+
+}</code></pre>
+
+</div>
+
+</div>
+
+</div>
+
+<!-- GET /chat/managed-tasks -->
+
+<div class="api-block border border-getborder bg-getbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-blue-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-get text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">GET</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/chat/managed-tasks</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">获取左侧边栏：我的后台托管任务 (Cron/盯盘)</span>
+
+</div>
+
+<div class="api-content bg-white border-getborder">
+
+<div class="p-5">
+
+<pre><code class="language-json">{
+
+"code": 200,
+
+"data": {
+
+"running_count": 2,
+
+"tasks": [{"task_id": "tsk_cron_1", "name": "预算盯盘", "trigger": "条件触发", "status": "RUNNING"}]
+
+}
+
+}</code></pre>
+
+</div>
+
+</div>
+
+</div>
+
+<!-- POST /chat/completions -->
+
+<div class="api-block border border-postborder bg-postbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-green-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-post text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">POST</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/chat/completions</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">发起自然语言会话 (支持 Server-Sent Events)</span>
+
+</div>
+
+<div class="api-content bg-white border-postborder">
+
+<div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
+
+<div>
+
+<h4 class="font-bold text-sm text-gray-700">Request Body</h4>
+
+<pre><code class="language-json">{
+
+"session_id": "sess_001",
+
+"message": "帮我建一个促活任务，总预算两万。",
+
+<span class="comment">// 允许指定目标任务ID，便于显式干预旧任务</span>
+
+"target_task_id": null,
+
+"context_mode": "auto",
+
+"source_channel": "LUI_WORKSPACE"
+
+}</code></pre>
+
+</div>
+
+<div>
+
+<h4 class="font-bold text-sm text-gray-700">Response <span class="text-xs font-normal text-gray-500">(text/event-stream)</span></h4>
+
+<pre><code class="language-json">// 事件1：文本
+
+event: message
+
+data: {"task_id": "tsk_001", "type": "text", "content": "好的..."}
+
+// 事件2：GUI卡片下发
+
+event: action_card
+
+data: {
+
+"task_id": "tsk_001", "type": "card_render",
+
+"card_schema": {
+
+"component": "TaskConfigForm",
+
+"payload": {"budget": 20000},
+
+"actions": [{"id": "submit_oa", "label": "确认提交"}]
+
+}
+
+}</code></pre>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+<!-- POST /chat/action/execute -->
+
+<div class="api-block border border-postborder bg-postbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-green-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-post text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">POST</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/chat/action/execute</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">提交 GUI 卡片动作 (支持双态响应)</span>
+
+</div>
+
+<div class="api-content bg-white border-postborder">
+
+<div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
+
+<div>
+
+<h4 class="font-bold text-sm text-gray-700">Request Headers</h4>
+
+<div class="bg-gray-50 p-2 rounded text-sm font-mono mt-1 mb-3">Idempotency-Key: uuid-v4-xxxxx</div>
+
+<h4 class="font-bold text-sm text-gray-700">Request Body</h4>
+
+<pre><code class="language-json">{
+
+"session_id": "sess_001", "task_id": "tsk_001",
+
+"action_id": "submit_oa",
+
+"payload": {"budget": 20000, "is_confirmed": true}
+
+}</code></pre>
+
+</div>
+
+<div>
+
+<h4 class="font-bold text-sm text-gray-700">Response <span class="text-xs font-normal text-gray-500">(修复：增加双态响应机制)</span></h4>
+
+<pre><code class="language-json">{
+
+"code": 200, "message": "Action executed",
+
+"data": {
+
+<span class="comment">// 枚举：SUSPENDED (挂起), SYNC_COMPLETED (同步完成)</span>
+
+"next_state": "SUSPENDED",
+
+"trace_id": "OA-2024-8902",
+
+<span class="comment">// 若为 SYNC_COMPLETED，则直接返回业务结果供 UI 更新</span>
+
+"sync_result": null
+
+}
+
+}</code></pre>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+<!-- GET /chat/offline-inbox -->
+
+<div class="api-block border border-getborder bg-getbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-blue-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-get text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">GET</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/chat/offline-inbox</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">拉取离线消息信箱</span>
+
+</div>
+
+<div class="api-content bg-white border-getborder">
+
+<div class="p-5">
+
+<pre><code class="language-json">{
+
+"code": 200,
+
+"data": {
+
+"unread_count": 1,
+
+"messages": [
+
+{"task_id": "tsk_001", "type": "async_result", "quote_ref_id": "msg_OA-8902", "content": "您的审批已通过。"}
+
+]
+
+}
+
+}</code></pre>
+
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+<!-- ========================================================= -->
+
+<!-- Group 1: 统一回调网关层 (Event Gateway) -->
+
+<!-- ========================================================= -->
+
+<section>
+
+<h3 class="section-title"><span class="text-2xl mr-2">🛜</span> 统一回调网关层 (Event Gateway)</h3>
+
+<!-- POST /callbacks/webhook/unified -->
+
+<div class="api-block border border-postborder bg-postbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-green-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-post text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">POST</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/callbacks/webhook/unified</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">外部系统统一异步唤醒接口 (增加防重放头)</span>
+
+</div>
+
+<div class="api-content bg-white border-postborder">
+
+<div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
+
+<div>
+
+<h4 class="font-bold text-sm text-gray-700">Security Headers <span class="text-xs text-red-500">(防重发校验)</span></h4>
+
+<pre><code class="language-json">X-Timestamp: 1715421000
+
+X-Nonce: "a3b9c2d1..."
+
+X-Signature: "sha256=abc123def..."</code></pre>
+
+<h4 class="font-bold text-sm text-gray-700 mt-3">Request Body</h4>
+
+<pre><code class="language-json">{
+
+"source_system": "OA_SYSTEM",
+
+"trace_id": "OA-2024-8902",
+
+"status": "APPROVED",
+
+"observation_data": { "approver": "王总监", "comment": "同意" }
+
+}</code></pre>
+
+</div>
+
+<div>
+
+<h4 class="font-bold text-sm text-gray-700">Response</h4>
+
+<pre><code class="language-json">{ "code": 200, "message": "Callback received. Resuming." }</code></pre>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+</section>
+
+<!-- ========================================================= -->
+
+<!-- Group 2: B端 技能注册中心 (Skill Registry) -->
+
+<!-- ========================================================= -->
+
+<section>
+
+<h3 class="section-title"><span class="text-2xl mr-2">🧩</span> B端：技能注册中心 (Skill Registry)</h3>
+
+<div class="api-block border border-getborder bg-getbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-blue-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-get text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">GET</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/skills</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">分页查询技能列表</span>
+
+</div>
+
+<div class="api-content bg-white border-getborder">
+
+<div class="p-5">
+
+<div class="mb-3 text-sm text-gray-600">Query Params: <span class="query-param">page=1</span> <span class="query-param">size=10</span> <span class="query-param">type=ASYNC_SKILL</span></div>
+
+<pre><code class="language-json">{ "code": 200, "data": { "items": [{"id": "sk_9901", "name": "SubmitOAApproval"}], "page_info": {"total": 124, "current_page": 1, "has_more": true} } }</code></pre>
+
+</div>
+
+</div>
+
+</div>
+
+<div class="api-block border border-getborder bg-getbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-blue-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-get text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">GET</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/skills/{skill_id}</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">获取技能详情</span>
+
+</div>
+
+<div class="api-content bg-white border-getborder">
+
+<div class="p-5"><pre><code class="language-json">{ "code": 200, "data": { "name": "SubmitOAApproval", "type": "ASYNC_SKILL", "input_schema": {...}, "output_schema": {...} } }</code></pre></div>
+
+</div>
+
+</div>
+
+<div class="api-block border border-postborder bg-postbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-green-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-post text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">POST</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/skills</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">注册原子技能 (强化双向 Schema 约束)</span>
+
+</div>
+
+<div class="api-content bg-white border-postborder">
+
+<div class="p-5">
+
+<pre><code class="language-json">{
+
+"name": "SubmitOAApproval", "type": "ASYNC_SKILL",
+
+"execution_config": { "endpoint": "https://oa.corp.com/api", "auth_type": "SYSTEM_AK_SK" },
+
+"mao_control_meta": { "x_mao_suspend": true, "ttl_seconds": 259200, "callback_expect": "WEBHOOK" },
+
+<span class="comment">// 遵循 JSON Schema Draft-07 标准，为 LLM 提供确定性的推演依据</span>
+
+"input_schema": { "type": "object", "properties": { "amount": {"type": "number"} } },
+
+"output_schema": { "type": "object", "properties": { "ticket_id": {"type": "string"} } }
+
+}</code></pre>
+
+</div>
+
+</div>
+
+</div>
+
+<div class="api-block border border-putborder bg-putbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-orange-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-put text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">PUT</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/skills/{skill_id}</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">更新技能配置</span>
+
+</div>
+
+<div class="api-content bg-white border-putborder"><div class="p-5"><pre><code class="language-json">{ "description": "更新描述...", "input_schema": {...}, "output_schema": {...} }</code></pre></div></div>
+
+</div>
+
+<div class="api-block border border-delborder bg-delbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-red-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-del text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">DELETE</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/skills/{skill_id}</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">删除原子技能</span>
+
+</div>
+
+<div class="api-content bg-white border-delborder"><div class="p-5"><pre><code class="language-json">{ "code": 200, "message": "Deleted successfully" }</code></pre></div></div>
+
+</div>
+
+</section>
+
+<!-- ========================================================= -->
+
+<!-- Group 3: B端 智能体工厂 (Agent Factory) -->
+
+<!-- ========================================================= -->
+
+<section>
+
+<h3 class="section-title"><span class="text-2xl mr-2">🤖</span> B端：智能体工厂 (Agent Factory)</h3>
+
+<div class="api-block border border-getborder bg-getbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-blue-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-get text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">GET</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/agents</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">分页查询智能体列表</span>
+
+</div>
+
+<div class="api-content bg-white border-getborder">
+
+<div class="p-5">
+
+<div class="mb-3 text-sm text-gray-600">Query Params: <span class="query-param">page=1</span> <span class="query-param">size=20</span> <span class="query-param">status=PUBLISHED</span></div>
+
+<pre><code class="language-json">{ "code": 200, "data": { "items": [{"id": "ag_1001", "name": "发奖专员"}], "page_info": {"total": 45, "has_more": true} } }</code></pre>
+
+</div>
+
+</div>
+
+</div>
+
+<div class="api-block border border-postborder bg-postbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-green-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-post text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">POST</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/agents</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">新建智能体草稿 (Init Draft)</span>
+
+</div>
+
+<div class="api-content bg-white border-postborder"><div class="p-5"><pre><code class="language-json">{ "agent_name": "未命名智能体草稿" }</code></pre></div></div>
+
+</div>
+
+<div class="api-block border border-getborder bg-getbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-blue-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-get text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">GET</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/agents/{agent_id}</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">获取 Agent 当前草稿详情</span>
+
+</div>
+
+<div class="api-content bg-white border-getborder"><div class="p-5"><pre><code class="language-json">{ "agent_name": "发奖专员", "system_prompt": "...", "model_config": {...}, "rag_retrieval_config": {...} }</code></pre></div></div>
+
+</div>
+
+<div class="api-block border border-putborder bg-putbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-orange-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-put text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">PUT</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/agents/{agent_id}</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">保存智能体草稿 (强化熔断与 RAG 召回参数)</span>
+
+</div>
+
+<div class="api-content bg-white border-putborder">
+
+<div class="p-5">
+
+<pre><code class="language-json">{
+
+"agent_name": "发奖专员",
+
+"system_prompt": "你的职责是...",
+
+"mounted_skills_ids": ["sk_01", "sk_02"],
+
+"rag_kb_ids": ["rag_1001"],
+
+<span class="comment">// 核心防线：RAG 必须配置召回策略，防止 Context 爆仓</span>
+
+"rag_retrieval_config": {
+
+"top_k": 3,
+
+"similarity_threshold": 0.75
+
+},
+
+<span class="comment">// 核心防线：LLM 的推理熔断限制</span>
+
+"model_config": {
+
+"provider": "gemini-1.5-pro",
+
+"temperature": 0.2,
+
+"max_output_tokens": 2048,
+
+"agent_max_steps": 7 // 限制最大 ReAct 循环次数
+
+}
+
+}</code></pre>
+
+</div>
+
+</div>
+
+</div>
+
+<div class="api-block border border-postborder bg-postbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-green-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-post text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">POST</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/agents/{agent_id}/publish</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">发布草稿生成不可变快照</span>
+
+</div>
+
+<div class="api-content bg-white border-postborder">
+
+<div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
+
+<div><h4 class="font-bold text-sm text-gray-700">Request Body</h4><pre><code class="language-json">{ "version_desc": "上线新风控能力" }</code></pre></div>
+
+<div>
+
+<h4 class="font-bold text-sm text-gray-700">Response <span class="text-xs text-red-500">(含校验结果)</span></h4>
+
+<pre><code class="language-json">{
+
+"code": 200,
+
+"data": {
+
+"version_id": "v1.3",
+
+"validation_results": [{"level": "WARN", "msg": "提示词未引用知识库"}]
+
+}
+
+}</code></pre>
+
+</div>
+
+</div>
+
+</div>
+
+</div>
+
+<!-- Snapshots 溯源与回滚 -->
+
+<div class="api-block border border-getborder bg-getbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-blue-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-get text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">GET</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/agents/{agent_id}/snapshots</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">获取历史快照列表</span>
+
+</div>
+
+<div class="api-content bg-white border-getborder"><div class="p-5"><pre><code class="language-json">{ "code": 200, "data": [ {"version": "v1.2", "published_at": "2026-05-10T10:00:00Z"} ] }</code></pre></div></div>
+
+</div>
+
+<div class="api-block border border-getborder bg-getbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-blue-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-get text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">GET</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/agents/{agent_id}/snapshots/{version}</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">查看特定历史快照详情</span>
+
+</div>
+
+<div class="api-content bg-white border-getborder"><div class="p-5"><pre><code class="language-json">{ "code": 200, "data": { "version": "v1.1", "is_immutable": true, "system_prompt": "旧提示词..." } }</code></pre></div></div>
+
+</div>
+
+<div class="api-block border border-postborder bg-postbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-green-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-post text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">POST</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/agents/{agent_id}/snapshots/{version}/restore</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">一键回滚 (覆盖当前草稿)</span>
+
+</div>
+
+<div class="api-content bg-white border-postborder"><div class="p-5"><pre><code class="language-json">{ "code": 200, "message": "Snapshot v1.1 restored to draft successfully." }</code></pre></div></div>
+
+</div>
+
+<div class="api-block border border-delborder bg-delbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-red-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-del text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">DELETE</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/agents/{agent_id}</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">删除智能体</span>
+
+</div>
+
+<div class="api-content bg-white border-delborder"><div class="p-5"><pre><code class="language-json">{ "code": 200, "message": "Agent deleted" }</code></pre></div></div>
+
+</div>
+
+</section>
+
+<!-- ========================================================= -->
+
+<!-- Group 4: B端 全局编排画布 (SOP Workflows) -->
+
+<!-- ========================================================= -->
+
+<section>
+
+<h3 class="section-title"><span class="text-2xl mr-2">🗺️</span> B端：全局编排画布 (SOP Workflows)</h3>
+
+<div class="api-block border border-getborder bg-getbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-blue-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-get text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">GET</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/workflows</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">分页查询画布列表</span>
+
+</div>
+
+<div class="api-content bg-white border-getborder">
+
+<div class="p-5">
+
+<div class="mb-3 text-sm text-gray-600">Query Params: <span class="query-param">page=1</span> <span class="query-param">size=10</span></div>
+
+<pre><code class="language-json">{ "code": 200, "data": { "items": [{"id": "wf_101", "name": "资损排查", "version": "v2.0"}], "page_info": {"total": 24, "has_more": false} } }</code></pre>
+
+</div>
+
+</div>
+
+</div>
+
+<div class="api-block border border-postborder bg-postbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-green-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-post text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">POST</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/workflows</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">新建画布空草稿</span>
+
+</div>
+
+<div class="api-content bg-white border-postborder"><div class="p-5"><pre><code class="language-json">{ "name": "未命名 SOP 草稿" }</code></pre></div></div>
+
+</div>
+
+<div class="api-block border border-getborder bg-getbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-blue-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-get text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">GET</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/workflows/{workflow_id}</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">获取 DAG 草稿详情</span>
+
+</div>
+
+<div class="api-content bg-white border-getborder"><div class="p-5"><pre><code class="language-json">{ "code": 200, "data": { "name": "资损排查", "blackboard_schema": {...}, "nodes": [], "edges": [] } }</code></pre></div></div>
+
+</div>
+
+<div class="api-block border border-putborder bg-putbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-orange-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-put text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">PUT</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/workflows/{workflow_id}</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">保存画布草稿 (补充控制流 CONDITION 节点规范)</span>
+
+</div>
+
+<div class="api-content bg-white border-putborder">
+
+<div class="p-5">
+
+<pre><code class="language-json">{
+
+"name": "资损排查 SOP",
+
+"blackboard_schema": { "type": "object", "properties": { "risk_level": {"type": "string"} } },
+
+"nodes": [
+
+{ "node_id": "n_agent_1", "type": "AGENT", "ref_id": "ag_1001", "config": { "timeout_sec": 30 } },
+
+<span class="comment">// 核心整改：增加 CONDITION 节点表达控制流</span>
+
+{
+
+"node_id": "n_cond_1",
+
+"type": "CONDITION",
+
+"config": { "expression": "$.risk_level == 'HIGH'" }
+
+}
+
+],
+
+"edges": [
+
+{
+
+"source_node": "n_agent_1",
+
+"target_node": "n_cond_1",
+
+<span class="comment">// 映射：提取上个节点的变量赋值给黑板或下个节点</span>
+
+"mappings": [ { "source_path": "$.output.level", "target_path": "bb.risk_level" } ]
+
+},
+
+<span class="comment">// CONDITION 节点的两个分支出口</span>
+
+{ "source_node": "n_cond_1", "source_handle": "TRUE", "target_node": "n_suspend_oa" },
+
+{ "source_node": "n_cond_1", "source_handle": "FALSE", "target_node": "n_finish" }
+
+]
+
+}</code></pre>
+
+</div>
+
+</div>
+
+</div>
+
+<div class="api-block border border-postborder bg-postbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-green-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-post text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">POST</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/workflows/{workflow_id}/publish</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">发布画布生成不可变快照</span>
+
+</div>
+
+<div class="api-content bg-white border-postborder"><div class="p-5"><pre><code class="language-json">{ "version_desc": "修复连线 BUG" }</code></pre></div></div>
+
+</div>
+
+<!-- Snapshots 溯源与回滚 -->
+
+<div class="api-block border border-getborder bg-getbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-blue-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-get text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">GET</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/workflows/{workflow_id}/snapshots</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">获取历史快照列表</span>
+
+</div>
+
+<div class="api-content bg-white border-getborder"><div class="p-5"><pre><code class="language-json">{ "code": 200, "data": [ {"version": "v2.0", "desc": "修改连线"} ] }</code></pre></div></div>
+
+</div>
+
+<div class="api-block border border-getborder bg-getbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-blue-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-get text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">GET</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/workflows/{workflow_id}/snapshots/{version}</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">查看特定历史快照详情</span>
+
+</div>
+
+<div class="api-content bg-white border-getborder"><div class="p-5"><pre><code class="language-json">{ "code": 200, "data": { "version": "v1.0", "is_immutable": true, "nodes": [] } }</code></pre></div></div>
+
+</div>
+
+<div class="api-block border border-postborder bg-postbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-green-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-post text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">POST</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/workflows/{workflow_id}/snapshots/{version}/restore</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">一键回滚 (覆盖当前草稿)</span>
+
+</div>
+
+<div class="api-content bg-white border-postborder"><div class="p-5"><pre><code class="language-json">{ "code": 200, "message": "Snapshot v1.0 restored to draft" }</code></pre></div></div>
+
+</div>
+
+<div class="api-block border border-delborder bg-delbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-red-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-del text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">DELETE</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/workflows/{workflow_id}</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">彻底删除画布</span>
+
+</div>
+
+<div class="api-content bg-white border-delborder"><div class="p-5"><pre><code class="language-json">{ "code": 200, "message": "Workflow deleted" }</code></pre></div></div>
+
+</div>
+
+</section>
+
+<!-- ========================================================= -->
+
+<!-- Group 5: B端 监控调度大盘 (Monitor & Cron) -->
+
+<!-- ========================================================= -->
+
+<section>
+
+<h3 class="section-title"><span class="text-2xl mr-2">📊</span> B端：监控调度大盘 (Monitor & Cron)</h3>
+
+<div class="api-block border border-getborder bg-getbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-blue-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-get text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">GET</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/tasks/active</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">查询全局活跃的 Task 列表</span>
+
+</div>
+
+<div class="api-content bg-white border-getborder">
+
+<div class="p-5">
+
+<div class="mb-3 text-sm text-gray-600">Query Params: <span class="query-param">page=1</span> <span class="query-param">size=50</span> <span class="query-param">status=RUNNING,SUSPENDED</span></div>
+
+<pre><code class="language-json">{ "code": 200, "data": { "items": [{"task_id": "tsk_01", "status": "RUNNING"}], "page_info": {"total": 1208, "has_more": true} } }</code></pre>
+
+</div>
+
+</div>
+
+</div>
+
+<div class="api-block border border-delborder bg-delbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-red-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-del text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">POST</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/tasks/{task_id}/kill</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">强制熔断挂起任务 (释放实体锁)</span>
+
+</div>
+
+<div class="api-content bg-white border-delborder"><div class="p-5"><pre><code class="language-json">{ "reason": "死循环消耗超标" }</code></pre></div></div>
+
+</div>
+
+<div class="api-block border border-getborder bg-getbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-blue-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-get text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">GET</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/cron-jobs</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">分页查询定时调度任务</span>
+
+</div>
+
+<div class="api-content bg-white border-getborder">
+
+<div class="p-5">
+
+<div class="mb-3 text-sm text-gray-600">Query Params: <span class="query-param">page=1</span> <span class="query-param">size=20</span></div>
+
+<pre><code class="language-json">{ "code": 200, "data": { "items": [{"job_id": "cj_1", "name": "数据早报", "status": "ACTIVE"}], "page_info": {"total": 156} } }</code></pre>
+
+</div>
+
+</div>
+
+</div>
+
+<div class="api-block border border-postborder bg-postbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-green-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-post text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">POST</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/cron-jobs</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">创建后台定时任务 (强化防重叠与时区)</span>
+
+</div>
+
+<div class="api-content bg-white border-postborder">
+
+<div class="p-5">
+
+<pre><code class="language-json">{
+
+"task_intent": "每天早上发早报",
+
+"cron_expression": "0 10 * * *",
+
+<span class="comment">// 核心防线：必须定义时区防云原生漂移</span>
+
+"timezone": "Asia/Shanghai",
+
+<span class="comment">// 核心防线：定义防重叠策略 (SKIP, QUEUE, CONCURRENT)</span>
+
+"overlap_policy": "SKIP",
+
+"jitter_sec": 300,
+
+"target_type": "AGENT",
+
+"target_ref_id": "ag_1001",
+
+"auth_impersonation": { "mode": "SERVICE_ACCOUNT_DELEGATION", "impersonate_user_id": "U_9527" },
+
+"retry_policy": { "max_attempts": 3, "backoff_sec": 300 },
+
+"fallback_action": { "type": "NOTIFY_CREATOR", "notify_channel": "WECHAT_WORK" }
+
+}</code></pre>
+
+</div>
+
+</div>
+
+</div>
+
+<div class="api-block border border-putborder bg-putbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-orange-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-put text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">PUT</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/cron-jobs/{job_id}</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">更新定时任务配置</span>
+
+</div>
+
+<div class="api-content bg-white border-putborder"><div class="p-5"><pre><code class="language-json">{ "cron_expression": "0 11 * * *", "overlap_policy": "QUEUE" }</code></pre></div></div>
+
+</div>
+
+<div class="api-block border border-patchborder bg-patchbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-teal-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-patch text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">PATCH</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/cron-jobs/{job_id}/toggle</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">暂停/恢复调度任务</span>
+
+</div>
+
+<div class="api-content bg-white border-patchborder"><div class="p-5"><pre><code class="language-json">{ "target_status": "PAUSED" }</code></pre></div></div>
+
+</div>
+
+<div class="api-block border border-delborder bg-delbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-red-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-del text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">DELETE</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/cron-jobs/{job_id}</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">删除调度任务</span>
+
+</div>
+
+<div class="api-content bg-white border-delborder"><div class="p-5"><pre><code class="language-json">{ "code": 200, "message": "Cron Job deleted" }</code></pre></div></div>
+
+</div>
+
+</section>
+
+<!-- ========================================================= -->
+
+<!-- Group 6: B端 会话审计与容灾 (Audit) -->
+
+<!-- ========================================================= -->
+
+<section>
+
+<h3 class="section-title"><span class="text-2xl mr-2">🔍</span> B端：会话审计与容灾 (Audit)</h3>
+
+<div class="api-block border border-getborder bg-getbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-blue-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-get text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">GET</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/audit/traces</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">分页查询执行链路日志 (Trace Logs)</span>
+
+</div>
+
+<div class="api-content bg-white border-getborder">
+
+<div class="p-5">
+
+<div class="mb-3 text-sm text-gray-600">Query Params: <span class="query-param">page=1</span> <span class="query-param">size=20</span> <span class="query-param">status=FAILED</span></div>
+
+<pre><code class="language-json">{
+
+"code": 200,
+
+"data": {
+
+"items": [
+
+{
+
+"trace_id": "tr_8899", "trigger_source": "LUI_WORKSPACE",
+
+"agent_id": "ag_1001", "snapshot_version": "v1.2",
+
+"status": "COMPLETED", "tokens": 4250
+
+}
+
+],
+
+"page_info": { "total": 2450, "current_page": 1, "has_more": true }
+
+}
+
+}</code></pre>
+
+</div>
+
+</div>
+
+</div>
+
+<div class="api-block border border-getborder bg-getbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-blue-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-get text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">GET</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/audit/traces/{trace_id}</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">获取单次 Task 完整的执行脑电图详情</span>
+
+</div>
+
+<div class="api-content bg-white border-getborder">
+
+<div class="p-5">
+
+<pre><code class="language-json">{
+
+"trace_id": "tr_8899",
+
+"status": "PAUSED_FOR_APPROVAL",
+
+"execution_snapshot_version": "v1.0.3",
+
+"metrics": { "total_tokens_consumed": 4250, "execution_time_ms": 2400 },
+
+"steps": [
+
+{"step": 1, "type": "THOUGHT", "content": "准备提取参数..."},
+
+{"step": 2, "type": "ACTION", "tool": "RunCompensateSOP"}
+
+]
+
+}</code></pre>
+
+</div>
+
+</div>
+
+</div>
+
+<div class="api-block border border-postborder bg-postbg">
+
+<div class="flex items-center cursor-pointer px-4 py-3 hover:bg-green-50/50 transition-colors" onclick="toggleApi(this)">
+
+<span class="bg-post text-white font-bold text-sm w-20 text-center py-1.5 rounded mr-4">POST</span>
+
+<span class="font-mono font-bold text-gray-800 text-sm lg:text-base flex-1">/admin/audit/traces/{task_id}/retry</span>
+
+<span class="text-gray-600 text-sm hidden sm:block">断点续传：基于历史快照从失败节点拉起重试</span>
+
+</div>
+
+<div class="api-content bg-white border-postborder"><div class="p-5"><pre><code class="language-json">{ "resume_mode": "RETRY_FAILED_NODE" }</code></pre></div></div>
+
+</div>
+
+</section>
+
+</div>
+
+<script>
+
+// 代码高亮逻辑
+
+document.querySelectorAll('code.language-json').forEach(block => {
+
+let html = block.innerHTML;
+
+html = html.replace(/"(.*?)"(?=:)/g, '<span class="key">"$1"</span>');
+
+html = html.replace(/: "(.*?)"/g, ': <span class="string">"$1"</span>');
+
+html = html.replace(/: (true|false|null)/g, ': <span class="boolean">$1</span>');
+
+html = html.replace(/: (\d+)/g, ': <span class="number">$1</span>');
+
+html = html.replace(/\/\/ (.*)/g, '<span class="comment">// $1</span>');
+
+block.innerHTML = html;
+
+});
+
+// 切换面板展示
+
+function toggleApi(element) {
+
+const block = element.parentElement;
+
+const content = block.querySelector('.api-content');
+
+if (content) {
+
+block.classList.toggle('open');
+
+}
+
+}
+
+</script>
+
+</body>
+
+</html>
