@@ -1,8 +1,8 @@
 -- ============================================================
 -- MAO 营销多智能体协同编排平台 - 数据库 DDL 建表语句
--- 版本: V9.2-PROD
+-- 版本: V9.3-PROD
 -- 数据库: MySQL 8.0+
--- 规范: 严格遵循 17 条数据库设计规范
+-- 规范: 严格遵循 18 条数据库设计规范
 -- ============================================================
 
 -- 用户表
@@ -13,11 +13,13 @@ CREATE TABLE `mao_user` (
   `role`             VARCHAR(32)  NOT NULL                COMMENT '角色: ADMIN/OPERATOR/VIEWER',
   `department`       VARCHAR(64)                          COMMENT '所属部门',
   `permission_level` VARCHAR(8)   NOT NULL DEFAULT 'L1'   COMMENT '权限等级: L1/L2/L3/L4',
-  `created_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `created_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_username` (`username`),
-  UNIQUE KEY `uk_email` (`email`)
+  UNIQUE KEY `uk_email` (`email`),
+  KEY `ix_updated_at` (`updated_at`),
+  KEY `ix_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户信息表';
 
 -- 会话表
@@ -29,11 +31,13 @@ CREATE TABLE `mao_session` (
   `context_window` TEXT                                  COMMENT '当前滑动窗口内的压缩上下文',
   `status`         VARCHAR(32)   NOT NULL DEFAULT 'ACTIVE' COMMENT '状态: ACTIVE/ARCHIVED',
   `message_count`  INT           NOT NULL DEFAULT 0      COMMENT '消息总数',
-  `created_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `created_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_session_id` (`session_id`),
   KEY `idx_user_id` (`user_id`),
+  KEY `ix_updated_at` (`updated_at`),
+  KEY `ix_created_at` (`created_at`),
   CONSTRAINT `fk_session_user` FOREIGN KEY (`user_id`) REFERENCES `mao_user` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话信息表';
 
@@ -45,9 +49,12 @@ CREATE TABLE `mao_message` (
   `content`      TEXT                                 COMMENT '文本内容',
   `message_type` VARCHAR(32)  NOT NULL DEFAULT 'TEXT' COMMENT '类型: TEXT/CARD/SYSTEM_NOTICE/SUSPEND_CARD',
   `card_schema`  JSON                                 COMMENT '卡片 JSON Schema（type=CARD 时必填）',
+  `updated_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `created_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   KEY `idx_session_id` (`session_id`),
+  KEY `ix_updated_at` (`updated_at`),
+  KEY `ix_created_at` (`created_at`),
   CONSTRAINT `fk_message_session` FOREIGN KEY (`session_id`) REFERENCES `mao_session` (`session_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话消息表';
 
@@ -60,13 +67,13 @@ CREATE TABLE `mao_task` (
   `workflow_id`       VARCHAR(64)                           COMMENT '承接的 SOP 画布 ID（与 agent_id 二选一）',
   `status`            VARCHAR(32)   NOT NULL DEFAULT 'PENDING' COMMENT '任务状态（见 TaskStatus 枚举）',
   `fail_reason`       VARCHAR(64)                           COMMENT '失败原因（见 TaskFailReason 枚举）',
-  `state_snap_key`    VARCHAR(128)                          COMMENT 'StateDB 外置快照 Key（实际快照存储于 Redis/DynamoDB）',
+  `state_snap_key`    VARCHAR(128)                          COMMENT 'StateDB 外置快照 Key（实际快照存储于 Redis）',
   `execution_version` VARCHAR(32)                           COMMENT '执行时绑定的 SOP 版本号（如 v1.0）',
   `oa_ticket_id`      VARCHAR(64)                           COMMENT '关联的 OA 审批单号',
   `idempotency_key`   VARCHAR(128)                          COMMENT '幂等键: {task_id}_{card_action_id}',
-  `created_at`        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `updated_at`        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `expired_at`        DATETIME                              COMMENT '任务过期时间（用于 TTL 强杀）',
+  `updated_at`        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `created_at`        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_task_id` (`task_id`),
   UNIQUE KEY `uk_idempotency_key` (`idempotency_key`),
@@ -74,6 +81,8 @@ CREATE TABLE `mao_task` (
   KEY `idx_status` (`status`),
   KEY `idx_state_snap_key` (`state_snap_key`),
   KEY `idx_oa_ticket_id` (`oa_ticket_id`),
+  KEY `ix_updated_at` (`updated_at`),
+  KEY `ix_created_at` (`created_at`),
   CONSTRAINT `fk_task_session` FOREIGN KEY (`session_id`) REFERENCES `mao_session` (`session_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='任务实例表';
 
@@ -87,27 +96,32 @@ CREATE TABLE `mao_task_log` (
   `output_data` JSON                                COMMENT '步骤输出数据',
   `duration_ms` INT                                 COMMENT '执行耗时（毫秒）',
   `status`      VARCHAR(32) NOT NULL DEFAULT 'SUCCESS' COMMENT '状态: SUCCESS/FAILED/SKIPPED',
+  `updated_at`  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `created_at`  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   KEY `idx_task_id` (`task_id`),
+  KEY `ix_updated_at` (`updated_at`),
+  KEY `ix_created_at` (`created_at`),
   CONSTRAINT `fk_task_log_task` FOREIGN KEY (`task_id`) REFERENCES `mao_task` (`task_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='任务执行日志表（链路脑电图）';
 
 -- 智能体配置表
 CREATE TABLE `mao_agent` (
-  `id`           BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
-  `agent_id`     VARCHAR(64)  NOT NULL                COMMENT 'Agent 唯一标识 agent_{uuid}',
-  `name`         VARCHAR(128) NOT NULL                COMMENT 'Agent 名称',
-  `description`  TEXT         NOT NULL                COMMENT 'Agent 职责描述（Router 匹配依据）',
-  `system_prompt` TEXT        NOT NULL                COMMENT 'System Prompt 完整内容',
-  `max_steps`    INT          NOT NULL DEFAULT 7      COMMENT '最大推演步数（熔断阈值）',
-  `rag_kb_ids`   JSON                                 COMMENT '关联的 RAG 知识库 ID 列表',
-  `created_by`   BIGINT       NOT NULL                COMMENT '创建人 ID',
-  `created_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `updated_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `id`            BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `agent_id`      VARCHAR(64)  NOT NULL                COMMENT 'Agent 唯一标识 agent_{uuid}',
+  `name`          VARCHAR(128) NOT NULL                COMMENT 'Agent 名称',
+  `description`   TEXT         NOT NULL                COMMENT 'Agent 职责描述（Router 匹配依据）',
+  `system_prompt` TEXT         NOT NULL                COMMENT 'System Prompt 完整内容',
+  `max_steps`     INT          NOT NULL DEFAULT 7      COMMENT '最大推演步数（熔断阈值）',
+  `rag_kb_ids`    JSON                                 COMMENT '关联的 RAG 知识库 ID 列表',
+  `created_by`    BIGINT       NOT NULL                COMMENT '创建人 ID',
+  `updated_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `created_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_agent_id` (`agent_id`),
   KEY `idx_created_by` (`created_by`),
+  KEY `ix_updated_at` (`updated_at`),
+  KEY `ix_created_at` (`created_at`),
   CONSTRAINT `fk_agent_user` FOREIGN KEY (`created_by`) REFERENCES `mao_user` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='智能体配置表';
 
@@ -128,12 +142,14 @@ CREATE TABLE `mao_skill` (
   `is_high_risk`  TINYINT(1)    NOT NULL DEFAULT 0      COMMENT '是否为高危 API（禁止在 Cron 中直接执行）',
   `call_count`    BIGINT        NOT NULL DEFAULT 0      COMMENT '调用次数（调用热度统计）',
   `created_by`    BIGINT        NOT NULL                COMMENT '创建人 ID',
-  `created_at`    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `created_at`    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_skill_id` (`skill_id`),
   KEY `idx_type` (`type`),
   KEY `idx_created_by` (`created_by`),
+  KEY `ix_updated_at` (`updated_at`),
+  KEY `ix_created_at` (`created_at`),
   CONSTRAINT `fk_skill_user` FOREIGN KEY (`created_by`) REFERENCES `mao_user` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='技能注册表';
 
@@ -143,8 +159,12 @@ CREATE TABLE `mao_agent_skill_rel` (
   `agent_id`   VARCHAR(64) NOT NULL                COMMENT '智能体 ID',
   `skill_id`   VARCHAR(64) NOT NULL                COMMENT '技能 ID',
   `sort_order` INT         NOT NULL DEFAULT 0      COMMENT '排序权重',
+  `updated_at` DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `created_at` DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_agent_skill` (`agent_id`, `skill_id`),
+  KEY `ix_updated_at` (`updated_at`),
+  KEY `ix_created_at` (`created_at`),
   CONSTRAINT `fk_rel_agent` FOREIGN KEY (`agent_id`) REFERENCES `mao_agent` (`agent_id`),
   CONSTRAINT `fk_rel_skill` FOREIGN KEY (`skill_id`) REFERENCES `mao_skill` (`skill_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='智能体技能关联表';
@@ -160,36 +180,40 @@ CREATE TABLE `mao_workflow` (
   `status`         VARCHAR(32)   NOT NULL DEFAULT 'DRAFT' COMMENT '状态: DRAFT/PUBLISHED/DEPRECATED',
   `macro_skill_id` VARCHAR(64)                           COMMENT '注册为宏工具后对应的 skill_id',
   `created_by`     BIGINT        NOT NULL                COMMENT '创建人 ID',
-  `created_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `created_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_workflow_id` (`workflow_id`),
   KEY `idx_status` (`status`),
   KEY `idx_created_by` (`created_by`),
+  KEY `ix_updated_at` (`updated_at`),
+  KEY `ix_created_at` (`created_at`),
   CONSTRAINT `fk_workflow_user` FOREIGN KEY (`created_by`) REFERENCES `mao_user` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='SOP 工作流表';
 
 -- 定时任务表
 CREATE TABLE `mao_cron_job` (
-  `id`                  BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
-  `user_id`             BIGINT      NOT NULL                COMMENT '所属用户 ID',
-  `job_name`            VARCHAR(128) NOT NULL               COMMENT '任务名称',
-  `trigger_type`        VARCHAR(16) NOT NULL                COMMENT '触发类型: CRON/CONDITION',
-  `cron_expr`           VARCHAR(64)                         COMMENT 'Cron 表达式（CRON 类型必填）',
-  `condition_rule`      JSON                                COMMENT '条件触发规则（CONDITION 类型必填）',
-  `target_type`         VARCHAR(16) NOT NULL                COMMENT '目标类型: AGENT/WORKFLOW',
-  `target_agent_id`     VARCHAR(64)                         COMMENT '目标 Agent ID',
-  `target_workflow_id`  VARCHAR(64)                         COMMENT '目标工作流 ID',
-  `status`              VARCHAR(32) NOT NULL DEFAULT 'ACTIVE' COMMENT '状态: ACTIVE/PAUSED/EXPIRED',
-  `last_run_at`         DATETIME                            COMMENT '上次执行时间',
-  `next_run_at`         DATETIME                            COMMENT '下次执行时间',
-  `expired_at`          DATETIME                            COMMENT '过期时间',
-  `created_at`          DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `updated_at`          DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `id`                 BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `user_id`            BIGINT       NOT NULL                COMMENT '所属用户 ID',
+  `job_name`           VARCHAR(128) NOT NULL                COMMENT '任务名称',
+  `trigger_type`       VARCHAR(16)  NOT NULL                COMMENT '触发类型: CRON/CONDITION',
+  `cron_expr`          VARCHAR(64)                          COMMENT 'Cron 表达式（CRON 类型必填）',
+  `condition_rule`     JSON                                 COMMENT '条件触发规则（CONDITION 类型必填）',
+  `target_type`        VARCHAR(16)  NOT NULL                COMMENT '目标类型: AGENT/WORKFLOW',
+  `target_agent_id`    VARCHAR(64)                          COMMENT '目标 Agent ID',
+  `target_workflow_id` VARCHAR(64)                          COMMENT '目标工作流 ID',
+  `status`             VARCHAR(32)  NOT NULL DEFAULT 'ACTIVE' COMMENT '状态: ACTIVE/PAUSED/EXPIRED',
+  `last_run_at`        DATETIME                             COMMENT '上次执行时间',
+  `next_run_at`        DATETIME                             COMMENT '下次执行时间',
+  `expired_at`         DATETIME                             COMMENT '过期时间',
+  `updated_at`         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `created_at`         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   KEY `idx_user_id` (`user_id`),
   KEY `idx_status` (`status`),
   KEY `idx_next_run_at` (`next_run_at`),
+  KEY `ix_updated_at` (`updated_at`),
+  KEY `ix_created_at` (`created_at`),
   CONSTRAINT `fk_cron_user` FOREIGN KEY (`user_id`) REFERENCES `mao_user` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='定时任务配置表';
 
@@ -198,14 +222,17 @@ CREATE TABLE `mao_offline_inbox` (
   `id`              BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
   `user_id`         BIGINT      NOT NULL                COMMENT '目标用户 ID',
   `task_id`         VARCHAR(64) NOT NULL                COMMENT '关联任务 ID',
-  `channel_type`    VARCHAR(32) NOT NULL DEFAULT 'WEB'  COMMENT '目标渠道: WEB / FEISHU / DINGTALK / WECOM',
+  `channel_type`    VARCHAR(32) NOT NULL DEFAULT 'WEB'  COMMENT '目标渠道: WEB/FEISHU/DINGTALK/WECOM',
   `message_content` TEXT        NOT NULL                COMMENT '消息文本内容',
   `card_schema`     JSON                                COMMENT '消息卡片 Schema',
   `status`          VARCHAR(16) NOT NULL DEFAULT 'UNREAD' COMMENT '状态: UNREAD/READ',
-  `created_at`      DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `read_at`         DATETIME                            COMMENT '阅读时间',
+  `updated_at`      DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `created_at`      DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   KEY `idx_user_id_status` (`user_id`, `status`),
+  KEY `ix_updated_at` (`updated_at`),
+  KEY `ix_created_at` (`created_at`),
   CONSTRAINT `fk_inbox_user` FOREIGN KEY (`user_id`) REFERENCES `mao_user` (`id`),
   CONSTRAINT `fk_inbox_task` FOREIGN KEY (`task_id`) REFERENCES `mao_task` (`task_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='离线信箱表';
@@ -214,37 +241,44 @@ CREATE TABLE `mao_offline_inbox` (
 -- v9.1 新增：渠道适配层相关表
 -- ============================================================
 
--- 渠道账号绑定表：统一管理用户在各渠道的外部身份映射
+-- 渠道账号绑定表
 CREATE TABLE `mao_channel_account` (
-  `id`                BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
-  `user_id`           BIGINT        NOT NULL COMMENT '系统内部用户 ID',
-  `channel_type`      VARCHAR(32)   NOT NULL COMMENT '渠道类型: WEB / FEISHU / DINGTALK / WECOM',
-  `external_user_id`  VARCHAR(128)  NOT NULL COMMENT '外部渠道用户唯一标识（如飞书 OpenID）',
-  `external_app_id`   VARCHAR(128)  DEFAULT NULL COMMENT '外部应用 ID（如飞书 App ID）',
-  `access_token`      TEXT          DEFAULT NULL COMMENT '渠道访问凭证（AES-256 加密存储）',
-  `token_expires_at`  DATETIME      DEFAULT NULL COMMENT '凭证过期时间',
-  `created_at`        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `updated_at`        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `id`               BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `user_id`          BIGINT       NOT NULL               COMMENT '系统内部用户 ID',
+  `channel_type`     VARCHAR(32)  NOT NULL               COMMENT '渠道类型: WEB/FEISHU/DINGTALK/WECOM',
+  `external_user_id` VARCHAR(128) NOT NULL               COMMENT '外部渠道用户唯一标识（如飞书 OpenID）',
+  `external_app_id`  VARCHAR(128)                        COMMENT '外部应用 ID（如飞书 App ID）',
+  `access_token`     TEXT                                COMMENT '渠道访问凭证（AES-256 加密存储）',
+  `token_expires_at` DATETIME                            COMMENT '凭证过期时间',
+  `updated_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `created_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_channel_external_user` (`channel_type`, `external_user_id`, `external_app_id`),
   KEY `idx_user_id` (`user_id`),
+  KEY `ix_updated_at` (`updated_at`),
+  KEY `ix_created_at` (`created_at`),
   CONSTRAINT `fk_channel_account_user` FOREIGN KEY (`user_id`) REFERENCES `mao_user` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='渠道账号绑定表';
 
--- 渠道会话映射表：将外部渠道会话与 MAO 内部 Session 映射
+-- 渠道会话映射表
 CREATE TABLE `mao_channel_session` (
-  `id`               BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
-  `session_id`       VARCHAR(64)   NOT NULL COMMENT 'MAO 内部 Session ID',
-  `channel_type`     VARCHAR(32)   NOT NULL COMMENT '渠道类型',
-  `external_chat_id` VARCHAR(256)  NOT NULL COMMENT '外部渠道会话/群组 ID（如飞书 ChatID）',
-  `external_app_id`  VARCHAR(128)  NOT NULL COMMENT '外部应用 ID',
-  `created_at`       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `id`               BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `session_id`       VARCHAR(64)  NOT NULL               COMMENT 'MAO 内部 Session ID',
+  `channel_type`     VARCHAR(32)  NOT NULL               COMMENT '渠道类型: WEB/FEISHU/DINGTALK/WECOM',
+  `external_chat_id` VARCHAR(256) NOT NULL               COMMENT '外部渠道会话/群组 ID（如飞书 ChatID）',
+  `external_app_id`  VARCHAR(128) NOT NULL               COMMENT '外部应用 ID',
+  `updated_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `created_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_channel_chat` (`channel_type`, `external_chat_id`, `external_app_id`),
   KEY `idx_session_id` (`session_id`),
+  KEY `ix_updated_at` (`updated_at`),
+  KEY `ix_created_at` (`created_at`),
   CONSTRAINT `fk_channel_session_session` FOREIGN KEY (`session_id`) REFERENCES `mao_session` (`session_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='渠道会话映射表';
 
+-- ============================================================
 -- 说明：
 -- 本文件为目标态建表 SQL（greenfield 初始化库直接执行）。
 -- 存量库升级请使用独立迁移脚本，不在本设计 SQL 中使用 ALTER TABLE 过程语句。
+-- ============================================================
