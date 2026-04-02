@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from mao.channel.base import BaseChannelAdapter, OmniMessage
 from mao.channel.feishu import get_feishu_adapter
+from mao.channel.dingtalk import get_dingtalk_adapter
+from mao.channel.wecom import get_wecom_adapter
 from mao.core.enums import ChannelType
 from mao.core.redis_client import sse_push
 from mao.db.models.channel import MaoChannelSession, MaoOfflineInbox
@@ -30,6 +32,8 @@ class ChannelDispatcher:
         self.db = db
         self._adapters: dict[str, BaseChannelAdapter] = {
             ChannelType.FEISHU.value: get_feishu_adapter(),
+            ChannelType.DINGTALK.value: get_dingtalk_adapter(),
+            ChannelType.WECOM.value: get_wecom_adapter(),
         }
 
     async def dispatch(self, session_id: str, omni_message: OmniMessage) -> None:

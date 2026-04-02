@@ -56,12 +56,22 @@ class SendMessageRequest(BaseModel):
     idempotency_key: str | None = Field(None, description="幂等键，防止重复提交")
 
 
+
+
+class ChatCompletionRequest(BaseModel):
+    session_id: str
+    message: str = Field(..., min_length=1, max_length=4000)
+    target_task_id: str | None = None
+    context_mode: str | None = "auto"
+    source_channel: str | None = "LUI_WORKSPACE"
+
+
 class ExecuteActionRequest(BaseModel):
     task_id: str
     action_id: str
     action_type: str = Field(..., description="CONFIRM / CANCEL / SUBMIT_FORM / SELECT_INTENT")
     payload: dict[str, Any] = Field(default_factory=dict)
-    idempotency_key: str = Field(..., description="幂等键（必填，防止卡片二次触发）")
+    idempotency_key: str | None = Field(None, description="幂等键（可通过 Header 传入）")
 
 
 class OfflineInboxItem(BaseModel):
@@ -129,6 +139,74 @@ async def list_sessions(
     ]
 
 
+
+
+async def _dispatch_message(
+    session_id: str,
+    user_content: str,
+    idempotency_key: str | None,
+    db: AsyncSession,
+) -> dict[str, Any]:
+    if idempotency_key:
+        existing = await db.execute(select(MaoTask).where(MaoTask.idempotency_key == idempotency_key))
+        if existing.scalar_one_or_none():
+            raise HTTPException(status_code=409, detail="Duplicate request (idempotency key already used)")
+
+    user_msg = MaoMessage(session_id=session_id, role="user", content=user_content, message_type=MessageType.TEXT.value)
+    db.add(user_msg)
+
+    intent_router = IntentRouter(db)
+    route_result = await intent_router.route(user_content)
+
+    if route_result.route_type == "CLARIFICATION_REQUIRED":
+        card_schema = {
+            "title": "意图澄清",
+            "elements": [{"type": "text", "content": "检测到多个可承接对象，请手动选择。"}],
+            "actions": [
+                {
+                    "action_id": f"clarify:{item.get('type')}:{item.get('id')}",
+                    "label": item.get("name", "未命名"),
+                    "action_type": "SELECT_INTENT",
+                    "payload": item,
+                }
+                for item in route_result.clarification_candidates
+            ],
+            "client_side_lock": True,
+        }
+        db.add(MaoMessage(session_id=session_id, role="assistant", message_type=MessageType.CARD.value, card_schema=card_schema))
+        await db.commit()
+        return {"task_id": None, "status": "SUSPENDED", "route_type": route_result.route_type, "card_schema": card_schema}
+
+    task_service = TaskService(db)
+    task = await task_service.create_task(
+        session_id=session_id,
+        agent_id=route_result.target_id if route_result.route_type == "AGENT" else None,
+        workflow_id=route_result.target_id if route_result.route_type == "WORKFLOW" else None,
+        idempotency_key=idempotency_key,
+    )
+    await db.commit()
+
+    if route_result.route_type != "DIRECT_REPLY":
+        asyncio.create_task(task_service.run_task(task=task, user_message=user_content, agent_config={}, skill_registry={}))
+
+    return {"task_id": task.task_id, "status": task.status, "route_type": route_result.route_type, "routed_to": route_result.target_name}
+
+
+@router.post("/completions")
+async def chat_completions(
+    req: ChatCompletionRequest,
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    current_user: MaoUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    result = await db.execute(select(MaoSession).where(MaoSession.session_id == req.session_id, MaoSession.user_id == current_user.user_id))
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    data = await _dispatch_message(req.session_id, req.message, idempotency_key, db)
+    return {"code": 200, "message": "Success", "data": data}
+
+
 @router.get("/sessions/{session_id}/stream")
 async def stream_chat(
     session_id: str,
@@ -181,59 +259,13 @@ async def send_message(
     发送消息并触发 Agent 推演。
     响应立即返回 task_id，实际执行结果通过 SSE 流式推送。
     """
-    # 幂等检查
-    if req.idempotency_key:
-        existing = await db.execute(
-            select(MaoTask).where(MaoTask.idempotency_key == req.idempotency_key)
-        )
-        if existing.scalar_one_or_none():
-            raise HTTPException(status_code=409, detail="Duplicate request (idempotency key already used)")
-
-    # 写入用户消息到 mao_message（Session Memory）
-    user_msg = MaoMessage(
-        session_id=session_id,
-        role="user",
-        content=req.content,
-        message_type=MessageType.TEXT.value,
-    )
-    db.add(user_msg)
-
-    # 意图路由
-    intent_router = IntentRouter(db)
-    route_result = await intent_router.route(req.content)
-
-    # 创建任务
-    task_service = TaskService(db)
-    task = await task_service.create_task(
-        session_id=session_id,
-        agent_id=route_result.target_id if route_result.route_type == "AGENT" else None,
-        workflow_id=route_result.target_id if route_result.route_type == "WORKFLOW" else None,
-        idempotency_key=req.idempotency_key,
-    )
-    await db.commit()
-
-    # 后台异步执行（不阻塞 API 响应）
-    if route_result.route_type != "DIRECT_REPLY":
-        asyncio.create_task(
-            task_service.run_task(
-                task=task,
-                user_message=req.content,
-                agent_config={},   # 实际从 DB 加载
-                skill_registry={}, # 实际从 DB 加载
-            )
-        )
-
-    return {
-        "task_id": task.task_id,
-        "status": task.status,
-        "route_type": route_result.route_type,
-        "routed_to": route_result.target_name,
-    }
+    return await _dispatch_message(session_id, req.content, req.idempotency_key, db)
 
 
 @router.post("/action/execute")
 async def execute_card_action(
     req: ExecuteActionRequest,
+    idempotency_key_header: str | None = Header(None, alias="Idempotency-Key"),
     current_user: MaoUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -245,7 +277,10 @@ async def execute_card_action(
     """
     # 幂等检查：同一 idempotency_key 只处理一次
     from mao.core.redis_client import redis_client
-    idem_key = f"card_action:{req.idempotency_key}"
+    effective_idem = req.idempotency_key or idempotency_key_header
+    if not effective_idem:
+        raise HTTPException(status_code=400, detail="Idempotency key required")
+    idem_key = f"card_action:{effective_idem}"
     if not await redis_client.set(idem_key, "1", nx=True, ex=300):
         raise HTTPException(status_code=409, detail="Duplicate card action (idempotency key already used)")
 

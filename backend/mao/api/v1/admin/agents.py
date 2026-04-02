@@ -109,6 +109,19 @@ async def list_agents(
     return [await _to_agent_response(a, db) for a in agents]
 
 
+
+
+@router.get("/{agent_id}", response_model=AgentResponse)
+async def get_agent(
+    agent_id: str,
+    current_admin: MaoUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> AgentResponse:
+    _ = current_admin
+    agent = await _get_agent_or_404(agent_id, db)
+    return await _to_agent_response(agent, db)
+
+
 @router.put("/{agent_id}", response_model=AgentResponse)
 async def update_agent(
     agent_id: str,
@@ -229,6 +242,28 @@ async def list_snapshots(
     ]
 
 
+
+
+@router.get("/{agent_id}/snapshots/{version}")
+async def get_snapshot_detail(
+    agent_id: str,
+    version: str,
+    current_admin: MaoUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    _ = current_admin
+    result = await db.execute(
+        select(MaoAgentSnapshot).where(
+            MaoAgentSnapshot.agent_id == agent_id,
+            MaoAgentSnapshot.version == version,
+        )
+    )
+    snapshot = result.scalar_one_or_none()
+    if not snapshot:
+        raise HTTPException(status_code=404, detail=f"Snapshot {version} not found")
+    return {"agent_id": agent_id, "version": version, "snapshot_data": snapshot.snapshot_data}
+
+
 @router.post("/{agent_id}/snapshots/{version}/restore")
 async def restore_snapshot(
     agent_id: str,
@@ -268,6 +303,21 @@ async def restore_snapshot(
     await db.commit()
 
     return {"agent_id": agent_id, "restored_version": version, "status": "RESTORED"}
+
+
+
+
+@router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_agent(
+    agent_id: str,
+    current_admin: MaoUser = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    _ = current_admin
+    agent = await _get_agent_or_404(agent_id, db)
+    agent.is_active = False
+    db.add(agent)
+    await db.commit()
 
 
 # ─── 辅助函数 ───────────────────────────────
