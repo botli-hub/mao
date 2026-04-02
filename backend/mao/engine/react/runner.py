@@ -343,8 +343,26 @@ class ReActRunner:
           - model_candidates: 全量模型列表（优先级最高）
         """
         primary = model_cfg.get("model", settings.openai_default_model)
-        from_candidates = model_cfg.get("model_candidates") or []
-        from_fallbacks = model_cfg.get("model_fallbacks") or []
+        raw_candidates = model_cfg.get("model_candidates")
+        raw_fallbacks = model_cfg.get("model_fallbacks")
+
+        def _normalize_models(raw: Any, field_name: str) -> list[Any]:
+            if raw is None:
+                return []
+            if isinstance(raw, list):
+                return raw
+            if isinstance(raw, tuple):
+                return list(raw)
+            logger.warning(
+                "[%s] Ignored invalid %s type: %s",
+                self.task_id,
+                field_name,
+                type(raw).__name__,
+            )
+            return []
+
+        from_candidates = _normalize_models(raw_candidates, "model_candidates")
+        from_fallbacks = _normalize_models(raw_fallbacks, "model_fallbacks")
 
         merged = [*from_candidates] if from_candidates else [primary, *from_fallbacks]
         candidates: list[str] = []
