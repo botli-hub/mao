@@ -13,6 +13,7 @@ export function ChatWindow() {
   const { currentSessionId, messages, addMessage, setIsLoading } = useChatStore()
   const [inputValue, setInputValue] = React.useState('')
   const [isStreaming, setIsStreaming] = React.useState(false)
+  const [streamingContent, setStreamingContent] = React.useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const currentMessageRef = useRef<string>('')
 
@@ -27,6 +28,7 @@ export function ChatWindow() {
   const handleSSEEvent = (event: SSEEvent) => {
     if (event.event === 'stream_chunk' && event.data.delta) {
       currentMessageRef.current += event.data.delta
+      setStreamingContent(currentMessageRef.current)
       setIsStreaming(true)
     } else if (event.event === 'action_card' && event.data.card_schema) {
       const msg: Message = {
@@ -40,6 +42,7 @@ export function ChatWindow() {
       }
       addMessage(msg)
       currentMessageRef.current = ''
+      setStreamingContent('')
     } else if (event.event === 'task_summary') {
       const msg: Message = {
         message_id: event.data.message_id ?? `msg_${Date.now()}`,
@@ -51,6 +54,7 @@ export function ChatWindow() {
       }
       addMessage(msg)
       setIsStreaming(false)
+      setStreamingContent('')
       setIsLoading(false)
     } else if (event.event === 'done') {
       if (currentMessageRef.current) {
@@ -64,6 +68,7 @@ export function ChatWindow() {
         }
         addMessage(msg)
         currentMessageRef.current = ''
+        setStreamingContent('')
       }
       setIsStreaming(false)
       setIsLoading(false)
@@ -133,11 +138,11 @@ export function ChatWindow() {
             )}
           </div>
         ))}
-        {isStreaming && currentMessageRef.current && (
+        {isStreaming && streamingContent && (
           <div className="flex justify-start">
             <div className="max-w-2xl px-4 py-3 rounded-lg bg-gray-100 text-gray-900">
               <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm">
-                {currentMessageRef.current}
+                {streamingContent}
               </ReactMarkdown>
               <span className="animate-pulse">▌</span>
             </div>
