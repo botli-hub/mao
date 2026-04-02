@@ -1,6 +1,6 @@
 -- ============================================================
 -- MAO 营销多智能体协同编排平台 - 数据库 DDL 建表语句
--- 版本: V9.4-PROD
+-- 版本: V9.5-PROD
 -- 数据库: MySQL 8.0+
 -- 规范: 严格遵循 18 条数据库设计规范
 -- ============================================================
@@ -94,8 +94,9 @@ CREATE TABLE `mao_task_log` (
   `step_index`  INT         NOT NULL                COMMENT '步骤序号（从 0 开始）',
   `input_data`  JSON                                COMMENT '步骤输入数据',
   `output_data` JSON                                COMMENT '步骤输出数据',
-  `duration_ms` INT                                 COMMENT '执行耗时（毫秒）',
-  `status`      VARCHAR(32) NOT NULL DEFAULT 'SUCCESS' COMMENT '状态: SUCCESS/FAILED/SKIPPED',
+  `duration_ms`    INT         COMMENT '执行耗时（毫秒）',
+  `state_digest`    JSON        COMMENT 'Shadow Sync 状态摘要：{blackboard_snapshot, execution_version, token_usage}',
+  `status`          VARCHAR(32) NOT NULL DEFAULT 'SUCCESS' COMMENT '状态: SUCCESS/FAILED/SKIPPED',
   `updated_at`  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `created_at`  DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
@@ -280,6 +281,31 @@ CREATE TABLE `mao_channel_session` (
   KEY `ix_created_at` (`created_at`),
   CONSTRAINT `fk_channel_session_session` FOREIGN KEY (`session_id`) REFERENCES `mao_session` (`session_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='渠道会话映射表';
+
+-- ============================================================
+-- v9.5 新增：热冷数据一致性保障表
+-- ============================================================
+
+-- 任务快照归档表（挂起时深冻结快照持久化）
+CREATE TABLE `mao_task_snapshot_archive` (
+  `id`               BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
+  `task_id`          VARCHAR(64)  NOT NULL               COMMENT '关联任务 ID',
+  `suspend_seq`      INT          NOT NULL DEFAULT 1     COMMENT '第几次挂起（支持多轮审批）',
+  `trigger_type`     VARCHAR(32)  NOT NULL               COMMENT '触发方式: SUSPEND_EVENT/TTL_WARNING/CRON_SCAN',
+  `snapshot_data`    JSON         NOT NULL               COMMENT 'Redis 全量快照序列化内容（ReAct 历史+黑板+执行版本）',
+  `redis_key`        VARCHAR(128) NOT NULL               COMMENT '对应的 Redis Key（归档后仅保留索引）',
+  `execution_version` VARCHAR(32) NOT NULL               COMMENT '快照时的 SOP 执行版本号',
+  `archived_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '归档时间',
+  `updated_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `created_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_task_suspend_seq` (`task_id`, `suspend_seq`),
+  KEY `idx_task_id` (`task_id`),
+  KEY `idx_trigger_type` (`trigger_type`),
+  KEY `ix_updated_at` (`updated_at`),
+  KEY `ix_created_at` (`created_at`),
+  CONSTRAINT `fk_snapshot_task` FOREIGN KEY (`task_id`) REFERENCES `mao_task` (`task_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='任务快照归档表（热冷数据一致性保障）';
 
 -- ============================================================
 -- 说明：

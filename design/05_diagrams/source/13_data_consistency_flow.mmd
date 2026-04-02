@@ -1,0 +1,36 @@
+sequenceDiagram
+    autonumber
+    participant Worker as L4 ReAct Worker
+    participant Redis as StateDB (Redis)
+    participant Kafka as Observer Log (Kafka)
+    participant Archiver as Archiver Service
+    participant MySQL as Cold Storage (MySQL)
+
+    Note over Worker, MySQL: 1. 正常推演步骤 (Shadow Sync & Observer Log)
+    Worker->>Redis: RPUSH 完整快照 (Append-only)
+    Worker->>Kafka: 异步发送 Thought/Action 事件
+    Worker->>MySQL: 写入 mao_task_log (含 state_digest)
+    
+    Note over Kafka, MySQL: 2. 异步流式归档
+    Kafka-->>Archiver: 消费审计事件
+    Archiver->>MySQL: 批量更新/插入审计明细 (幂等)
+
+    Note over Worker, MySQL: 3. 任务挂起触发深冻结 (Deep Freeze)
+    Worker->>Worker: 触发 ASYNC 技能，状态变更为 SUSPENDED
+    Worker->>Redis: 获取当前全量快照
+    Worker->>MySQL: 写入 mao_task_snapshot_archive (持久化)
+    Worker->>Worker: 销毁当前线程，释放资源
+
+    Note over Archiver, MySQL: 4. 兜底迁移策略 (TTL 预警)
+    Archiver->>Redis: 扫描 TTL < 10% 的挂起快照
+    Archiver->>MySQL: 强制归档至 task_snapshot_archive
+    Archiver->>Redis: 释放 Redis 内存，仅留索引 Key
+
+    Note over Worker, MySQL: 5. 审计回溯重构 (Reconstruct)
+    Archiver->>Redis: 优先尝试读取全量快照
+    alt Redis 命中
+        Redis-->>Archiver: 返回完整脑电图
+    else Redis 缺失 (过期或宕机)
+        Archiver->>MySQL: 读取 task_log (state_digest) + snapshot_archive
+        MySQL-->>Archiver: 返回部分/重组脑电图 (is_complete: false)
+    end

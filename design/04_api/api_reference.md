@@ -1,6 +1,6 @@
 # MAO 平台 — 全景 API 接口文档 (v9.0-PROD)
 
-> **版本**：V9.1-PROD | **更新日期**：2026-04 | **新增**：8.9 渠道适配层接口、8.10 统一消息下发规范、8.11 渠道类型枚举
+> **版本**：V9.5-PROD | **更新日期**：2026-04 | **新增**：8.9 渠道适配层接口、8.10 统一消息下发规范、8.11 渠道类型枚举、8.12 热冷数据一致性接口
 
 ---
 
@@ -666,6 +666,61 @@ POST /admin/audit/traces/{task_id}/retry
 ```json
 { "resume_mode": "RETRY_FAILED_NODE" }
 ```
+
+#### 8.8.4 回港重构：审计视角的断点还原
+
+```
+GET /admin/audit/traces/{trace_id}/reconstruct
+```
+
+**描述**：提供审计视角的“断点还原”能力。接口采用两段式重组逻辑：优先读取 Redis 全量快照；若 Redis 缺失，则自动通过 MySQL 中的 `mao_task_log.state_digest` 序列按时间戳重组执行链路。
+
+**响应示例（完整还原）**：
+```json
+{
+  "code": 200,
+  "data": {
+    "trace_id": "tr_8899",
+    "is_complete": true,
+    "source": "REDIS",
+    "execution_version": "v1.2",
+    "steps": [
+      {
+        "step_index": 0,
+        "type": "THOUGHT",
+        "content": "准备提取参数...",
+        "state_digest": {
+          "blackboard_snapshot": {"user_id": "u123"},
+          "execution_version": "v1.2",
+          "token_usage": {"prompt": 800, "completion": 120}
+        }
+      },
+      {"step_index": 1, "type": "ACTION", "tool": "RunCompensateSOP", "state_digest": {}}
+    ]
+  }
+}
+```
+
+**响应示例（部分还原， Redis 缺失）**：
+```json
+{
+  "code": 200,
+  "data": {
+    "trace_id": "tr_8899",
+    "is_complete": false,
+    "source": "MYSQL_RECONSTRUCT",
+    "missing_steps": [3, 4],
+    "execution_version": "v1.2",
+    "steps": [
+      {"step_index": 0, "type": "THOUGHT", "content": "准备提取参数..."},
+      {"step_index": 1, "type": "ACTION", "tool": "RunCompensateSOP"},
+      {"step_index": 2, "type": "OBSERVATION", "content": "SOP 已启动"}
+    ]
+  }
+}
+```
+
+> 当 `is_complete: false` 时，`missing_steps` 字段返回缺失的步骤索引列表，审计人员可明确知晓审计盲区范围。此接口不会返回 404，始终返回已可还原的最大局部链路。
 
 ---
 
