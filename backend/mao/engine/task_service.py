@@ -8,6 +8,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mao.core.enums import MessageType, TaskStatus
@@ -84,6 +85,16 @@ class TaskService:
             return
 
         try:
+            # 事务级悲观锁：确保同一 task 的状态流转在数据库层串行化
+            locked_task_result = await self.db.execute(
+                select(MaoTask).where(MaoTask.task_id == task_id).with_for_update()
+            )
+            locked_task = locked_task_result.scalar_one_or_none()
+            if not locked_task:
+                logger.warning(f"[{task_id}] Task row not found when acquiring DB lock")
+                return
+            task = locked_task
+
             # 更新状态：PENDING → RUNNING
             await self._transition_status(task, TaskStatus.RUNNING)
 
@@ -212,7 +223,7 @@ class TaskService:
         blackboard = await Blackboard.load(task_id)
 
         # 计算当前挂起轮次
-        from sqlalchemy import func, select
+        from sqlalchemy import func
         suspend_count_result = await self.db.execute(
             select(func.count()).where(MaoTaskSnapshotArchive.task_id == task_id)
         )

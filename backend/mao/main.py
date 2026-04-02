@@ -10,7 +10,7 @@ from typing import Awaitable, Callable
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from mao.api.v1 import callbacks, chat
 from mao.api.v1.admin import agents, audit, channel_accounts, cron_jobs, skills, workflows
@@ -21,6 +21,7 @@ from mao.services.inbox_retrier import get_inbox_retrier
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+MAX_ENVELOPE_BODY_BYTES = 1024 * 1024  # 1MB，避免中间件读取超大响应导致内存风险
 
 
 async def _run_background_service(
@@ -88,23 +89,34 @@ async def response_envelope_middleware(request: Request, call_next):
     if "application/json" not in content_type:
         return response
 
+    if isinstance(response, StreamingResponse):
+        return response
+
+    body = getattr(response, "body", None)
+    if not isinstance(body, (bytes, bytearray)):
+        return response
+    if len(body) > MAX_ENVELOPE_BODY_BYTES:
+        logger.warning("Skip response envelope due to large body: path=%s size=%s", request.url.path, len(body))
+        return response
+
     try:
-        body = b""
-        async for chunk in response.body_iterator:  # type: ignore[attr-defined]
-            body += chunk
         payload = json.loads(body.decode() or "{}")
     except Exception:
         return response
 
     if isinstance(payload, dict) and {"code", "message", "data"}.issubset(payload.keys()):
-        return JSONResponse(status_code=response.status_code, content=payload, headers=dict(response.headers))
+        headers = dict(response.headers)
+        headers.pop("content-length", None)
+        return JSONResponse(status_code=response.status_code, content=payload, headers=headers)
 
     wrapped = {
         "code": response.status_code,
         "message": "Success" if response.status_code < 400 else "Error",
         "data": payload,
     }
-    return JSONResponse(status_code=response.status_code, content=wrapped, headers=dict(response.headers))
+    headers = dict(response.headers)
+    headers.pop("content-length", None)
+    return JSONResponse(status_code=response.status_code, content=wrapped, headers=headers)
 
 
 @app.exception_handler(HTTPException)
