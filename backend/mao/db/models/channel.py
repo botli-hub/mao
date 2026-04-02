@@ -22,6 +22,7 @@ class MaoChannelAccount(Base):
     user_id: Mapped[str] = mapped_column(String(64), nullable=False, comment="系统 user_id")
     channel_type: Mapped[str] = mapped_column(String(32), nullable=False, comment="渠道类型: FEISHU/DINGTALK/WECOM")
     external_user_id: Mapped[str] = mapped_column(String(128), nullable=False, comment="渠道侧用户 ID（如飞书 OpenID）")
+    external_app_id: Mapped[str | None] = mapped_column(String(128), nullable=True, comment="外部应用 ID（如飞书 App ID）")
     access_token: Mapped[str | None] = mapped_column(Text, nullable=True, comment="渠道 OAuth2 访问令牌（加密存储）")
     token_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, comment="令牌过期时间")
     extra_data: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True, comment="渠道额外信息（如飞书 UnionID）")
@@ -47,6 +48,7 @@ class MaoChannelSession(Base):
     session_id: Mapped[str] = mapped_column(String(64), nullable=False, comment="MAO 会话 ID")
     channel_type: Mapped[str] = mapped_column(String(32), nullable=False, comment="渠道类型")
     external_chat_id: Mapped[str] = mapped_column(String(256), nullable=False, comment="渠道侧会话 ID（如飞书 ChatID，最长约 100 字符）")
+    external_app_id: Mapped[str | None] = mapped_column(String(128), nullable=True, comment="外部应用 ID")
     external_msg_id: Mapped[str | None] = mapped_column(String(128), nullable=True, comment="最近一条渠道消息 ID（用于回复线程）")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=func.now(), onupdate=func.now(), comment="更新时间"

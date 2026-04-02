@@ -23,29 +23,26 @@ settings = get_settings()
 
 class RouterResult:
     """路由结果。"""
+
     def __init__(
         self,
-        route_type: str,           # "AGENT" | "WORKFLOW" | "DIRECT_REPLY"
-        target_id: str | None,     # agent_id 或 workflow_id
+        route_type: str,  # "AGENT" | "WORKFLOW" | "DIRECT_REPLY" | "CLARIFICATION_REQUIRED"
+        target_id: str | None,
         target_name: str | None,
         confidence: float,
         reason: str,
+        clarification_candidates: list[dict[str, Any]] | None = None,
     ) -> None:
         self.route_type = route_type
         self.target_id = target_id
         self.target_name = target_name
         self.confidence = confidence
         self.reason = reason
+        self.clarification_candidates = clarification_candidates or []
 
 
 class IntentRouter:
-    """
-    意图路由器。
-    路由策略：
-    1. 快速路由：用户消息包含明确的 Agent/Workflow 名称时直接路由
-    2. LLM 语义路由：调用 LLM 从候选列表中选择最合适的目标
-    3. 兜底：无匹配时返回 DIRECT_REPLY（直接对话模式）
-    """
+    """意图路由器。"""
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -55,11 +52,6 @@ class IntentRouter:
         )
 
     async def route(self, user_message: str) -> RouterResult:
-        """
-        对用户消息进行意图路由。
-        :returns: RouterResult 路由结果
-        """
-        # 获取所有已发布的 Agent 和 Workflow
         agents = await self._get_published_agents()
         workflows = await self._get_published_workflows()
 
@@ -72,30 +64,45 @@ class IntentRouter:
                 reason="No published agents or workflows available",
             )
 
-        # 构建候选列表
         candidates = []
         for agent in agents:
-            candidates.append({
-                "type": "AGENT",
-                "id": agent.agent_id,
-                "name": agent.name,
-                "description": agent.description or "",
-            })
+            candidates.append(
+                {
+                    "type": "AGENT",
+                    "id": agent.agent_id,
+                    "name": agent.name,
+                    "description": agent.description or "",
+                }
+            )
         for wf in workflows:
-            candidates.append({
-                "type": "WORKFLOW",
-                "id": wf.workflow_id,
-                "name": wf.name,
-                "description": wf.description or "",
-            })
+            candidates.append(
+                {
+                    "type": "WORKFLOW",
+                    "id": wf.workflow_id,
+                    "name": wf.name,
+                    "description": wf.description or "",
+                }
+            )
 
-        # LLM 语义路由
-        return await self._llm_route(user_message, candidates)
+        routed = await self._llm_route(user_message, candidates)
+        if routed.route_type == "DIRECT_REPLY" and candidates:
+            ranked = self._rank_candidates_by_keyword(user_message, candidates)
+            if ranked and ranked[0]["score"] > 0:
+                top = ranked[:3]
+                near_tie = len(top) > 1 and abs(top[0]["score"] - top[1]["score"]) <= 1
+                low_confidence = routed.confidence < 0.65
+                if near_tie or low_confidence:
+                    return RouterResult(
+                        route_type="CLARIFICATION_REQUIRED",
+                        target_id=None,
+                        target_name=None,
+                        confidence=0.5,
+                        reason="Multiple candidates overlap; clarification required",
+                        clarification_candidates=[item["candidate"] for item in top],
+                    )
+        return routed
 
-    async def _llm_route(
-        self, user_message: str, candidates: list[dict[str, Any]]
-    ) -> RouterResult:
-        """使用 LLM 进行语义路由。"""
+    async def _llm_route(self, user_message: str, candidates: list[dict[str, Any]]) -> RouterResult:
         llm_result: dict[str, Any] | None = None
         if settings.engine_semantic_cache_enabled:
             cached = await self._semantic_cache_lookup(user_message)
@@ -150,7 +157,6 @@ class IntentRouter:
                 await self._semantic_cache_store(user_message, llm_result)
 
     async def _get_published_agents(self) -> list[MaoAgent]:
-        """获取所有已发布（非草稿）且启用的 Agent。"""
         result = await self.db.execute(
             select(MaoAgent).where(
                 MaoAgent.is_draft == False,  # noqa: E712
@@ -160,7 +166,6 @@ class IntentRouter:
         return list(result.scalars().all())
 
     async def _get_published_workflows(self) -> list[MaoWorkflow]:
-        """获取所有已发布且启用的 Workflow。"""
         result = await self.db.execute(
             select(MaoWorkflow).where(
                 MaoWorkflow.is_draft == False,  # noqa: E712
@@ -170,21 +175,13 @@ class IntentRouter:
         return list(result.scalars().all())
 
     async def _embed(self, text: str) -> list[float]:
-        """调用 embedding 模型生成向量。"""
-        rsp = await self._llm.embeddings.create(
-            model=settings.openai_embedding_model,
-            input=text,
-        )
+        rsp = await self._llm.embeddings.create(model=settings.openai_embedding_model, input=text)
         return rsp.data[0].embedding
 
     async def _semantic_cache_lookup(self, user_message: str) -> RouterResult | None:
-        """语义缓存命中：相似问题直接复用路由结果，避免重复 LLM 路由开销。"""
         try:
             target_embedding = await self._embed(user_message)
-            cache_items = await semantic_cache_get(
-                namespace="intent-router",
-                limit=settings.engine_semantic_cache_top_k,
-            )
+            cache_items = await semantic_cache_get(namespace="intent-router", limit=settings.engine_semantic_cache_top_k)
             best_item: dict[str, Any] | None = None
             best_score = -1.0
             for item in cache_items:
@@ -207,12 +204,7 @@ class IntentRouter:
             logger.warning(f"Semantic cache lookup skipped: {e}")
         return None
 
-    async def _semantic_cache_store(
-        self,
-        user_message: str,
-        route_result: dict[str, Any] | None,
-    ) -> None:
-        """将最新路由结果写入语义缓存。"""
+    async def _semantic_cache_store(self, user_message: str, route_result: dict[str, Any] | None) -> None:
         if not route_result:
             return
         try:
@@ -232,9 +224,18 @@ class IntentRouter:
         except Exception as e:
             logger.warning(f"Semantic cache store skipped: {e}")
 
+    def _rank_candidates_by_keyword(self, user_message: str, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        keywords = {w.lower() for w in user_message.split() if w.strip()}
+        ranked: list[dict[str, Any]] = []
+        for c in candidates:
+            text = f"{c.get('name', '')} {c.get('description', '')}".lower()
+            score = sum(1 for k in keywords if k and k in text)
+            ranked.append({"candidate": c, "score": score})
+        ranked.sort(key=lambda x: x["score"], reverse=True)
+        return ranked
+
     @staticmethod
     def _cosine_similarity(v1: list[float], v2: list[float]) -> float:
-        """计算余弦相似度。"""
         if not v1 or not v2 or len(v1) != len(v2):
             return -1.0
         dot = sum(a * b for a, b in zip(v1, v2))

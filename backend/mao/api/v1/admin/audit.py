@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,6 +20,13 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["B端-监控审计"])
 
 
+class RetryTraceRequest(BaseModel):
+    resume_mode: str = Field("RETRY_FAILED_NODE", pattern="^(RETRY_FAILED_NODE|SKIP_NODE)$")
+    node_id: str | None = None
+
+
+
+
 @router.get("/tasks/active")
 async def list_active_tasks(
     page: int = Query(1, ge=1),
@@ -26,7 +34,7 @@ async def list_active_tasks(
     current_admin: MaoUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """获取全局活跃任务列表（RUNNING + SUSPENDED）。"""
+    _ = current_admin
     result = await db.execute(
         select(MaoTask)
         .where(MaoTask.status.in_(["RUNNING", "SUSPENDED"]))
@@ -56,20 +64,13 @@ async def kill_task(
     current_admin: MaoUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """
-    强制熔断任务（管理员操作）。
-    释放分布式锁，将任务状态置为 CANCELLED，清理 Redis StateDB。
-    """
     result = await db.execute(select(MaoTask).where(MaoTask.task_id == task_id))
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
 
     if task.status in ("COMPLETED", "CANCELLED"):
-        raise HTTPException(
-            status_code=422,
-            detail=f"Task is already in terminal state: {task.status}"
-        )
+        raise HTTPException(status_code=422, detail=f"Task is already in terminal state: {task.status}")
 
     task_service = TaskService(db)
     await task_service.kill_task(task, reason=f"Force killed by admin {current_admin.user_id}")
@@ -87,7 +88,7 @@ async def list_traces(
     current_admin: MaoUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """获取全局执行 Trace 列表（支持按状态、Agent 过滤）。"""
+    _ = current_admin
     query = select(MaoTask).order_by(MaoTask.created_at.desc())
     if task_status:
         query = query.where(MaoTask.status == task_status)
@@ -118,16 +119,12 @@ async def get_trace_detail(
     current_admin: MaoUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """
-    获取单次执行的脑电图详情。
-    包含：任务元数据、完整执行步骤链路、Token 消耗统计。
-    """
+    _ = current_admin
     result = await db.execute(select(MaoTask).where(MaoTask.task_id == trace_id))
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail=f"Trace {trace_id} not found")
 
-    # 获取执行日志（Task Scratchpad）
     logs_result = await db.execute(
         select(MaoTaskLog)
         .where(MaoTaskLog.task_id == trace_id)
@@ -135,7 +132,6 @@ async def get_trace_detail(
     )
     logs = logs_result.scalars().all()
 
-    # 汇总 Token 消耗
     total_tokens = {"prompt": 0, "completion": 0, "total": 0}
     steps = []
     for log in logs:
@@ -144,15 +140,17 @@ async def get_trace_detail(
         total_tokens["prompt"] += token_usage.get("prompt", 0)
         total_tokens["completion"] += token_usage.get("completion", 0)
         total_tokens["total"] += token_usage.get("prompt", 0) + token_usage.get("completion", 0)
-        steps.append({
-            "step_index": log.step_index,
-            "step_type": log.step_type,
-            "content": log.content,
-            "skill_id": log.skill_id,
-            "token_usage": token_usage,
-            "execution_version": digest.get("execution_version"),
-            "created_at": log.created_at.isoformat(),
-        })
+        steps.append(
+            {
+                "step_index": log.step_index,
+                "step_type": log.step_type,
+                "content": log.content,
+                "skill_id": getattr(log, "skill_id", None),
+                "token_usage": token_usage,
+                "execution_version": digest.get("execution_version"),
+                "created_at": log.created_at.isoformat(),
+            }
+        )
 
     return {
         "trace_id": trace_id,
@@ -171,27 +169,24 @@ async def get_trace_detail(
 @router.post("/audit/traces/{trace_id}/retry")
 async def retry_trace(
     trace_id: str,
+    req: RetryTraceRequest,
     current_admin: MaoUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """
-    断点续传重试（从失败节点恢复执行）。
-    仅允许对 FAILED 状态的任务执行此操作。
-    """
     result = await db.execute(select(MaoTask).where(MaoTask.task_id == trace_id))
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail=f"Trace {trace_id} not found")
 
     if task.status != "FAILED":
-        raise HTTPException(
-            status_code=422,
-            detail=f"Only FAILED tasks can be retried (current: {task.status})"
-        )
+        raise HTTPException(status_code=422, detail=f"Only FAILED tasks can be retried (current: {task.status})")
 
-    # 重置任务状态为 PENDING，触发重新执行
     task.status = "PENDING"
     task.error_message = None
+    if req.resume_mode == "SKIP_NODE" and req.node_id:
+        task.suspend_reason = f"SKIP_NODE:{req.node_id}"
+    else:
+        task.suspend_reason = "RETRY_FAILED_NODE"
     db.add(task)
     await db.commit()
 
@@ -199,7 +194,9 @@ async def retry_trace(
     return {
         "trace_id": trace_id,
         "status": "PENDING",
-        "message": "Task queued for retry. Execution will resume from the last successful step.",
+        "message": "Task queued for retry. Execution will resume from the requested resume mode.",
+        "resume_mode": req.resume_mode,
+        "node_id": req.node_id,
     }
 
 
@@ -209,30 +206,29 @@ async def reconstruct_trace(
     current_admin: MaoUser = Depends(get_current_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """
-    执行链路断点还原接口。
-    优先从 Redis StateDB 读取完整快照；
-    若 Redis 缺失，则通过 MySQL mao_task_log 序列按时间戳重组执行链路。
-    """
+    """审计视角链路重构：优先 Redis，回退 MySQL。"""
     from mao.core.redis_client import state_get_steps
 
+    _ = current_admin
     result = await db.execute(select(MaoTask).where(MaoTask.task_id == trace_id))
     task = result.scalar_one_or_none()
     if not task:
         raise HTTPException(status_code=404, detail=f"Trace {trace_id} not found")
 
-    # 优先从 Redis 读取
     redis_steps = await state_get_steps(trace_id)
     if redis_steps:
         return {
-            "trace_id": trace_id,
-            "source": "redis",
-            "is_complete": True,
-            "missing_steps": [],
-            "steps": redis_steps,
+            "code": 200,
+            "message": "Success",
+            "data": {
+                "trace_id": trace_id,
+                "source": "REDIS",
+                "is_complete": True,
+                "missing_steps": [],
+                "steps": redis_steps,
+            },
         }
 
-    # Redis 缺失，从 MySQL 重组
     logs_result = await db.execute(
         select(MaoTaskLog)
         .where(MaoTaskLog.task_id == trace_id)
@@ -241,7 +237,6 @@ async def reconstruct_trace(
     logs = logs_result.scalars().all()
 
     if not logs:
-        # 尝试从快照归档恢复
         archive_result = await db.execute(
             select(MaoTaskSnapshotArchive)
             .where(MaoTaskSnapshotArchive.task_id == trace_id)
@@ -251,25 +246,37 @@ async def reconstruct_trace(
         archive = archive_result.scalar_one_or_none()
         if archive:
             return {
-                "trace_id": trace_id,
-                "source": "mysql_archive",
-                "is_complete": False,
-                "missing_steps": ["intermediate_steps_may_be_missing"],
-                "steps": archive.snapshot_data.get("steps", []),
-                "blackboard": archive.blackboard_data,
+                "code": 200,
+                "message": "Success",
+                "data": {
+                    "trace_id": trace_id,
+                    "source": "MYSQL_ARCHIVE",
+                    "is_complete": False,
+                    "missing_steps": ["intermediate_steps_may_be_missing"],
+                    "steps": archive.snapshot_data.get("steps", []),
+                    "blackboard": archive.blackboard_data,
+                },
             }
 
         return {
-            "trace_id": trace_id,
-            "source": "none",
-            "is_complete": False,
-            "missing_steps": ["all_steps_missing"],
-            "steps": [],
+            "code": 200,
+            "message": "Success",
+            "data": {
+                "trace_id": trace_id,
+                "source": "NONE",
+                "is_complete": False,
+                "missing_steps": ["all_steps_missing"],
+                "steps": [],
+            },
         }
+
+    indices = [getattr(log, "step_index", getattr(log, "step_seq", 0)) for log in logs]
+    max_idx = max(indices) if indices else -1
+    missing_steps = sorted(list(set(range(0, max_idx + 1)) - set(indices))) if max_idx >= 0 else []
 
     steps = [
         {
-            "step_index": log.step_index,
+            "step_index": getattr(log, "step_index", getattr(log, "step_seq", 0)),
             "step_type": log.step_type,
             "content": log.content,
             "state_digest": log.state_digest,
@@ -279,9 +286,13 @@ async def reconstruct_trace(
     ]
 
     return {
-        "trace_id": trace_id,
-        "source": "mysql_task_log",
-        "is_complete": True,
-        "missing_steps": [],
-        "steps": steps,
+        "code": 200,
+        "message": "Success",
+        "data": {
+            "trace_id": trace_id,
+            "source": "MYSQL_RECONSTRUCT",
+            "is_complete": len(missing_steps) == 0,
+            "missing_steps": missing_steps,
+            "steps": steps,
+        },
     }

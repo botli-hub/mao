@@ -7,7 +7,7 @@ from .session import MaoSession
 from .skill import MaoSkill
 from .task import MaoTask, MaoTaskLog, MaoTaskSnapshotArchive
 from .user import MaoUser
-from .workflow import MaoWorkflow
+from .workflow import MaoWorkflow, MaoWorkflowSnapshot
 
 __all__ = [
     "MaoUser",
@@ -21,6 +21,7 @@ __all__ = [
     "MaoAgentSnapshot",
     "MaoSkill",
     "MaoWorkflow",
+    "MaoWorkflowSnapshot",
     "MaoCronJob",
     "MaoChannelAccount",
     "MaoChannelSession",
