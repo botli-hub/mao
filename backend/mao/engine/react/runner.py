@@ -12,7 +12,7 @@ import logging
 import time
 from typing import Any
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, RateLimitError
 
 from mao.core.config import get_settings
 from mao.core.enums import StepType, TaskStatus
@@ -57,7 +57,9 @@ class ReActRunner:
         self.skill_registry = skill_registry  # {skill_name: skill_def}
 
         model_cfg = agent_config.get("model_config_data") or {}
-        self.model = model_cfg.get("model", settings.openai_default_model)
+        self.model_candidates = self._build_model_candidates(model_cfg)
+        self._active_model_idx = 0
+        self.model = self.model_candidates[self._active_model_idx]
         self.temperature = model_cfg.get("temperature", 0.2)
         self.max_steps = model_cfg.get("max_steps", settings.engine_max_steps)
 
@@ -101,6 +103,13 @@ class ReActRunner:
             except Exception as e:
                 self._consecutive_failures += 1
                 logger.error(f"[{self.task_id}] LLM call failed (step {step}): {e}")
+                if self._should_switch_model(e):
+                    switched = self._switch_to_next_model()
+                    if switched:
+                        logger.warning(
+                            f"[{self.task_id}] Switched model from {switched['from']} to {switched['to']}"
+                        )
+                        continue
                 if self._consecutive_failures >= settings.engine_circuit_breaker_threshold:
                     raise CircuitBreakerTripped(
                         f"Circuit breaker tripped after {self._consecutive_failures} consecutive failures"
@@ -324,3 +333,50 @@ class ReActRunner:
                 },
             })
         return tools
+
+    def _build_model_candidates(self, model_cfg: dict[str, Any]) -> list[str]:
+        """
+        构建可切换模型列表。
+        支持 model_config_data:
+          - model: 主模型
+          - model_fallbacks: 备选模型列表
+          - model_candidates: 全量模型列表（优先级最高）
+        """
+        primary = model_cfg.get("model", settings.openai_default_model)
+        from_candidates = model_cfg.get("model_candidates") or []
+        from_fallbacks = model_cfg.get("model_fallbacks") or []
+
+        merged = [*from_candidates] if from_candidates else [primary, *from_fallbacks]
+        candidates: list[str] = []
+        for model in merged:
+            if isinstance(model, str) and model and model not in candidates:
+                candidates.append(model)
+        if not candidates:
+            candidates = [settings.openai_default_model]
+        return candidates
+
+    def _switch_to_next_model(self) -> dict[str, str] | None:
+        """切换到下一个可用模型。若已经是最后一个模型，返回 None。"""
+        if self._active_model_idx >= len(self.model_candidates) - 1:
+            return None
+        from_model = self.model
+        self._active_model_idx += 1
+        self.model = self.model_candidates[self._active_model_idx]
+        self._consecutive_failures = 0
+        return {"from": from_model, "to": self.model}
+
+    def _should_switch_model(self, err: Exception) -> bool:
+        """仅在可恢复的上游错误时切换模型，避免业务逻辑错误触发抖动。"""
+        if len(self.model_candidates) <= 1:
+            return False
+        if isinstance(err, RateLimitError):
+            return True
+        transient_error_markers = (
+            "timeout",
+            "temporarily unavailable",
+            "overloaded",
+            "server error",
+            "service unavailable",
+        )
+        err_text = str(err).lower()
+        return any(marker in err_text for marker in transient_error_markers)
