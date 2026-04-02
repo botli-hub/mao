@@ -9,10 +9,11 @@ ReAct Runner — L4 智能执行引擎
 """
 import asyncio
 import logging
+import random
 import time
 from typing import Any
 
-from openai import AsyncOpenAI, RateLimitError
+from openai import APIConnectionError, APITimeoutError, AsyncOpenAI, RateLimitError
 
 from mao.core.config import get_settings
 from mao.core.enums import StepType, TaskStatus
@@ -93,13 +94,7 @@ class ReActRunner:
             # ── Thought：调用 LLM 推演 ──────────────────────────────────────
             thought_start = time.monotonic()
             try:
-                response = await self._llm.chat.completions.create(
-                    model=self.model,
-                    temperature=self.temperature,
-                    messages=messages,
-                    tools=self._build_tool_specs(),
-                    tool_choice="auto",
-                )
+                response = await self._call_llm_with_backoff(messages)
             except Exception as e:
                 self._consecutive_failures += 1
                 logger.error(f"[{self.task_id}] LLM call failed (step {step}): {e}")
@@ -380,3 +375,48 @@ class ReActRunner:
         )
         err_text = str(err).lower()
         return any(marker in err_text for marker in transient_error_markers)
+
+    async def _call_llm_with_backoff(self, messages: list[dict[str, Any]]) -> Any:
+        """
+        使用指数退避重试调用 LLM。
+        仅对可恢复错误重试（RateLimit/Timeout/Connection）。
+        """
+        last_error: Exception | None = None
+        max_attempts = max(1, settings.engine_llm_retry_attempts)
+
+        for attempt in range(1, max_attempts + 1):
+            try:
+                return await self._llm.chat.completions.create(
+                    model=self.model,
+                    temperature=self.temperature,
+                    messages=messages,
+                    tools=self._build_tool_specs(),
+                    tool_choice="auto",
+                )
+            except Exception as err:
+                last_error = err
+                if attempt >= max_attempts or not self._is_retryable_llm_error(err):
+                    raise
+                delay = self._calculate_backoff_delay(attempt)
+                logger.warning(
+                    f"[{self.task_id}] LLM transient error on model {self.model}, "
+                    f"retry {attempt}/{max_attempts} in {delay:.2f}s: {err}"
+                )
+                await asyncio.sleep(delay)
+
+        raise last_error or RuntimeError("LLM call failed without specific error")
+
+    def _is_retryable_llm_error(self, err: Exception) -> bool:
+        """判断错误是否适合指数退避重试。"""
+        if isinstance(err, (RateLimitError, APITimeoutError, APIConnectionError)):
+            return True
+        transient_error_markers = ("timeout", "temporarily unavailable", "overloaded")
+        text = str(err).lower()
+        return any(marker in text for marker in transient_error_markers)
+
+    def _calculate_backoff_delay(self, attempt: int) -> float:
+        """指数退避 + 抖动。"""
+        base = max(0.1, settings.engine_llm_retry_base_delay_seconds)
+        expo = base * (2 ** (attempt - 1))
+        jitter = random.uniform(0, base)
+        return min(10.0, expo + jitter)

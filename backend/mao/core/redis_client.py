@@ -129,3 +129,34 @@ async def sse_pop(session_id: str, timeout: int = 30) -> dict[str, Any] | None:
         _, raw = result
         return json.loads(raw)
     return None
+
+
+# ── 语义缓存 ──────────────────────────────────────────────────────────────────
+
+async def semantic_cache_get(namespace: str, limit: int = 20) -> list[dict[str, Any]]:
+    """读取语义缓存候选记录（按最近写入顺序）。"""
+    client = get_cache_client()
+    key = f"semantic:cache:{namespace}"
+    rows = await client.lrange(key, 0, max(limit - 1, 0))
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        try:
+            items.append(json.loads(row))
+        except json.JSONDecodeError:
+            continue
+    return items
+
+
+async def semantic_cache_put(
+    namespace: str,
+    item: dict[str, Any],
+    ttl_seconds: int = 3600,
+    max_items: int = 200,
+) -> None:
+    """写入语义缓存记录，并控制列表长度与 TTL。"""
+    client = get_cache_client()
+    key = f"semantic:cache:{namespace}"
+    payload = json.dumps(item, ensure_ascii=False)
+    await client.lpush(key, payload)
+    await client.ltrim(key, 0, max_items - 1)
+    await client.expire(key, ttl_seconds)

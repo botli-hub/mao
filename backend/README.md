@@ -158,3 +158,10 @@ ReAct Runner 支持按 Agent 维度配置多模型候选，在主模型出现限
   "model_candidates": ["gpt-4o", "gpt-4o-mini", "gpt-4.1-mini"]
 }
 ```
+
+### 稳定性与安全增强（新增）
+
+- **LLM 指数退避重试**：ReAct Runner 对限流/超时/连接错误启用 Exponential Backoff + Jitter。  
+- **语义缓存路由**：Intent Router 先查 Redis 语义缓存，命中后跳过 LLM 路由，降低时延与 Token 成本。  
+- **HITL 审批守卫**：技能可通过 `mao_control_meta.require_human_approval=true` 启用人工审批挂起。  
+- **TaskGroup 后台托管**：应用生命周期改为 `TaskGroup` 管理 Archiver/Retrier，避免静默退出。  
