@@ -5,6 +5,7 @@
 """
 import json
 import logging
+import math
 from typing import Any
 
 from openai import AsyncOpenAI
@@ -12,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mao.core.config import get_settings
+from mao.core.redis_client import semantic_cache_get, semantic_cache_put
 from mao.db.models.agent import MaoAgent
 from mao.db.models.workflow import MaoWorkflow
 
@@ -94,6 +96,12 @@ class IntentRouter:
         self, user_message: str, candidates: list[dict[str, Any]]
     ) -> RouterResult:
         """使用 LLM 进行语义路由。"""
+        llm_result: dict[str, Any] | None = None
+        if settings.engine_semantic_cache_enabled:
+            cached = await self._semantic_cache_lookup(user_message)
+            if cached:
+                return cached
+
         candidates_json = json.dumps(candidates, ensure_ascii=False, indent=2)
         prompt = f"""你是一个意图路由器。根据用户输入，从候选列表中选择最合适的处理器。
 
@@ -120,13 +128,13 @@ class IntentRouter:
                 messages=[{"role": "user", "content": prompt}],
                 response_format={"type": "json_object"},
             )
-            result = json.loads(response.choices[0].message.content or "{}")
+            llm_result = json.loads(response.choices[0].message.content or "{}")
             return RouterResult(
-                route_type=result.get("route_type", "DIRECT_REPLY"),
-                target_id=result.get("target_id"),
-                target_name=result.get("target_name"),
-                confidence=float(result.get("confidence", 0.5)),
-                reason=result.get("reason", ""),
+                route_type=llm_result.get("route_type", "DIRECT_REPLY"),
+                target_id=llm_result.get("target_id"),
+                target_name=llm_result.get("target_name"),
+                confidence=float(llm_result.get("confidence", 0.5)),
+                reason=llm_result.get("reason", ""),
             )
         except Exception as e:
             logger.error(f"Router LLM call failed: {e}")
@@ -137,6 +145,9 @@ class IntentRouter:
                 confidence=0.0,
                 reason=f"Router failed: {e}",
             )
+        finally:
+            if settings.engine_semantic_cache_enabled:
+                await self._semantic_cache_store(user_message, llm_result)
 
     async def _get_published_agents(self) -> list[MaoAgent]:
         """获取所有已发布（非草稿）且启用的 Agent。"""
@@ -157,3 +168,78 @@ class IntentRouter:
             )
         )
         return list(result.scalars().all())
+
+    async def _embed(self, text: str) -> list[float]:
+        """调用 embedding 模型生成向量。"""
+        rsp = await self._llm.embeddings.create(
+            model=settings.openai_embedding_model,
+            input=text,
+        )
+        return rsp.data[0].embedding
+
+    async def _semantic_cache_lookup(self, user_message: str) -> RouterResult | None:
+        """语义缓存命中：相似问题直接复用路由结果，避免重复 LLM 路由开销。"""
+        try:
+            target_embedding = await self._embed(user_message)
+            cache_items = await semantic_cache_get(
+                namespace="intent-router",
+                limit=settings.engine_semantic_cache_top_k,
+            )
+            best_item: dict[str, Any] | None = None
+            best_score = -1.0
+            for item in cache_items:
+                emb = item.get("embedding") or []
+                if not isinstance(emb, list):
+                    continue
+                score = self._cosine_similarity(target_embedding, emb)
+                if score > best_score:
+                    best_score = score
+                    best_item = item
+            if best_item and best_score >= settings.engine_semantic_cache_threshold:
+                return RouterResult(
+                    route_type=best_item.get("route_type", "DIRECT_REPLY"),
+                    target_id=best_item.get("target_id"),
+                    target_name=best_item.get("target_name"),
+                    confidence=float(best_item.get("confidence", 0.8)),
+                    reason=f"Semantic cache hit (score={best_score:.3f})",
+                )
+        except Exception as e:
+            logger.warning(f"Semantic cache lookup skipped: {e}")
+        return None
+
+    async def _semantic_cache_store(
+        self,
+        user_message: str,
+        route_result: dict[str, Any] | None,
+    ) -> None:
+        """将最新路由结果写入语义缓存。"""
+        if not route_result:
+            return
+        try:
+            embedding = await self._embed(user_message)
+            await semantic_cache_put(
+                namespace="intent-router",
+                item={
+                    "embedding": embedding,
+                    "route_type": route_result.get("route_type", "DIRECT_REPLY"),
+                    "target_id": route_result.get("target_id"),
+                    "target_name": route_result.get("target_name"),
+                    "confidence": float(route_result.get("confidence", 0.5)),
+                },
+                ttl_seconds=settings.engine_semantic_cache_ttl_seconds,
+                max_items=settings.engine_semantic_cache_max_items,
+            )
+        except Exception as e:
+            logger.warning(f"Semantic cache store skipped: {e}")
+
+    @staticmethod
+    def _cosine_similarity(v1: list[float], v2: list[float]) -> float:
+        """计算余弦相似度。"""
+        if not v1 or not v2 or len(v1) != len(v2):
+            return -1.0
+        dot = sum(a * b for a, b in zip(v1, v2))
+        norm1 = math.sqrt(sum(a * a for a in v1))
+        norm2 = math.sqrt(sum(b * b for b in v2))
+        if norm1 == 0 or norm2 == 0:
+            return -1.0
+        return dot / (norm1 * norm2)

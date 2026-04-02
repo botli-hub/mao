@@ -10,9 +10,11 @@ from typing import Any
 import httpx
 
 from mao.core.enums import SkillType
+from mao.core.config import get_settings
 from mao.core.kafka_client import emit_action
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class SkillExecutionError(Exception):
@@ -70,6 +72,7 @@ class SkillExecutor:
         skill_type = SkillType(skill_def.get("skill_type", "API"))
         tool_name = skill_def.get("name", "unknown")
         start_ts = time.monotonic()
+        self._guard_human_approval(skill_def, tool_input)
 
         try:
             if skill_type == SkillType.API:
@@ -100,6 +103,28 @@ class SkillExecutor:
                 emit_action(task_id, step_seq, tool_name, tool_input, {"error": str(e)}, latency_ms)
             )
             raise SkillExecutionError(f"Skill '{tool_name}' failed: {e}") from e
+
+    def _guard_human_approval(
+        self,
+        skill_def: dict[str, Any],
+        tool_input: dict[str, Any],
+    ) -> None:
+        """
+        HITL 审批守卫：对高风险技能先挂起，等待人工审批回调后再放行。
+        回调约定：tool_input.__approved__ == True 视为已审批。
+        """
+        mao_meta = skill_def.get("mao_control_meta") or {}
+        if not mao_meta.get("require_human_approval", False):
+            return
+
+        if tool_input.get("__approved__") is True:
+            return
+
+        callback_expect = mao_meta.get("approval_callback_expect", "HUMAN_APPROVED")
+        ttl_seconds = int(
+            mao_meta.get("approval_ttl_seconds", settings.engine_hitl_default_ttl_seconds)
+        )
+        raise SuspendSignal(callback_expect=callback_expect, ttl_seconds=ttl_seconds)
 
     async def _execute_api(
         self, skill_def: dict[str, Any], tool_input: dict[str, Any]

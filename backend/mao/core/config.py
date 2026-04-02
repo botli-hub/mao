@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     openai_api_key: str
     openai_base_url: str = "https://api.openai.com/v1"
     openai_default_model: str = "gpt-4o"
+    openai_router_model: str = "gpt-4o-mini"
     openai_embedding_model: str = "text-embedding-3-small"
 
     # ── 飞书 ──────────────────────────────────────────────────
@@ -63,6 +64,14 @@ class Settings(BaseSettings):
     engine_step_timeout_seconds: int = 30
     engine_max_retries: int = 3
     engine_circuit_breaker_threshold: int = 3
+    engine_llm_retry_attempts: int = 3
+    engine_llm_retry_base_delay_seconds: float = 0.5
+    engine_semantic_cache_enabled: bool = True
+    engine_semantic_cache_threshold: float = 0.92
+    engine_semantic_cache_top_k: int = 20
+    engine_semantic_cache_ttl_seconds: int = 3600
+    engine_semantic_cache_max_items: int = 200
+    engine_hitl_default_ttl_seconds: int = 3600
 
 
 @lru_cache
