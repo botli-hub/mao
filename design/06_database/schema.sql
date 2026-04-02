@@ -1,17 +1,18 @@
 -- ============================================================
 -- MAO 营销多智能体协同编排平台 - 数据库 DDL 建表语句
--- 版本: V9.1-PROD
+-- 版本: V9.2-PROD
 -- 数据库: MySQL 8.0+
+-- 规范: 严格遵循 17 条数据库设计规范
 -- ============================================================
 
 -- 用户表
 CREATE TABLE `mao_user` (
-  `id`               BIGINT       NOT NULL AUTO_INCREMENT COMMENT '用户主键',
+  `id`               BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
   `username`         VARCHAR(64)  NOT NULL                COMMENT '用户名',
   `email`            VARCHAR(128) NOT NULL                COMMENT '邮箱',
   `role`             VARCHAR(32)  NOT NULL                COMMENT '角色: ADMIN/OPERATOR/VIEWER',
   `department`       VARCHAR(64)                          COMMENT '所属部门',
-  `permission_level` VARCHAR(8)   NOT NULL DEFAULT 'L1'  COMMENT '权限等级: L1/L2/L3/L4',
+  `permission_level` VARCHAR(8)   NOT NULL DEFAULT 'L1'   COMMENT '权限等级: L1/L2/L3/L4',
   `created_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`       DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
@@ -21,6 +22,7 @@ CREATE TABLE `mao_user` (
 
 -- 会话表
 CREATE TABLE `mao_session` (
+  `id`             BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
   `session_id`     VARCHAR(64)   NOT NULL                COMMENT '会话唯一标识 sess_{uuid}',
   `user_id`        BIGINT        NOT NULL                COMMENT '所属用户 ID',
   `title`          VARCHAR(256)                          COMMENT '会话标题（由首条消息自动生成）',
@@ -29,14 +31,15 @@ CREATE TABLE `mao_session` (
   `message_count`  INT           NOT NULL DEFAULT 0      COMMENT '消息总数',
   `created_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`session_id`),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_session_id` (`session_id`),
   KEY `idx_user_id` (`user_id`),
   CONSTRAINT `fk_session_user` FOREIGN KEY (`user_id`) REFERENCES `mao_user` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='会话信息表';
 
 -- 消息表
 CREATE TABLE `mao_message` (
-  `id`           BIGINT       NOT NULL AUTO_INCREMENT COMMENT '消息主键',
+  `id`           BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
   `session_id`   VARCHAR(64)  NOT NULL                COMMENT '所属会话 ID',
   `role`         VARCHAR(16)  NOT NULL                COMMENT '角色: user/assistant/system',
   `content`      TEXT                                 COMMENT '文本内容',
@@ -50,31 +53,33 @@ CREATE TABLE `mao_message` (
 
 -- 任务表
 CREATE TABLE `mao_task` (
+  `id`                BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
   `task_id`           VARCHAR(64)   NOT NULL                COMMENT '任务唯一标识 task_{uuid}',
   `session_id`        VARCHAR(64)   NOT NULL                COMMENT '所属会话 ID',
   `agent_id`          VARCHAR(64)                           COMMENT '承接的 Agent ID（与 workflow_id 二选一）',
   `workflow_id`       VARCHAR(64)                           COMMENT '承接的 SOP 画布 ID（与 agent_id 二选一）',
   `status`            VARCHAR(32)   NOT NULL DEFAULT 'PENDING' COMMENT '任务状态（见 TaskStatus 枚举）',
   `fail_reason`       VARCHAR(64)                           COMMENT '失败原因（见 TaskFailReason 枚举）',
-  `state_snapshot_key` VARCHAR(128)                         COMMENT 'StateDB 外置快照 Key（实际快照存储于 Redis/DynamoDB）',
+  `state_snap_key`    VARCHAR(128)                          COMMENT 'StateDB 外置快照 Key（实际快照存储于 Redis/DynamoDB）',
   `execution_version` VARCHAR(32)                           COMMENT '执行时绑定的 SOP 版本号（如 v1.0）',
   `oa_ticket_id`      VARCHAR(64)                           COMMENT '关联的 OA 审批单号',
   `idempotency_key`   VARCHAR(128)                          COMMENT '幂等键: {task_id}_{card_action_id}',
   `created_at`        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `expired_at`        DATETIME                              COMMENT '任务过期时间（用于 TTL 强杀）',
-  PRIMARY KEY (`task_id`),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_task_id` (`task_id`),
   UNIQUE KEY `uk_idempotency_key` (`idempotency_key`),
   KEY `idx_session_id` (`session_id`),
   KEY `idx_status` (`status`),
-  KEY `idx_state_snapshot_key` (`state_snapshot_key`),
+  KEY `idx_state_snap_key` (`state_snap_key`),
   KEY `idx_oa_ticket_id` (`oa_ticket_id`),
   CONSTRAINT `fk_task_session` FOREIGN KEY (`session_id`) REFERENCES `mao_session` (`session_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='任务实例表';
 
 -- 任务执行日志表
 CREATE TABLE `mao_task_log` (
-  `id`          BIGINT      NOT NULL AUTO_INCREMENT COMMENT '日志主键',
+  `id`          BIGINT      NOT NULL AUTO_INCREMENT COMMENT '主键',
   `task_id`     VARCHAR(64) NOT NULL                COMMENT '所属任务 ID',
   `step_type`   VARCHAR(32) NOT NULL                COMMENT '步骤类型: ROUTER/THOUGHT/ACTION/OBSERVATION',
   `step_index`  INT         NOT NULL                COMMENT '步骤序号（从 0 开始）',
@@ -90,6 +95,7 @@ CREATE TABLE `mao_task_log` (
 
 -- 智能体配置表
 CREATE TABLE `mao_agent` (
+  `id`           BIGINT       NOT NULL AUTO_INCREMENT COMMENT '主键',
   `agent_id`     VARCHAR(64)  NOT NULL                COMMENT 'Agent 唯一标识 agent_{uuid}',
   `name`         VARCHAR(128) NOT NULL                COMMENT 'Agent 名称',
   `description`  TEXT         NOT NULL                COMMENT 'Agent 职责描述（Router 匹配依据）',
@@ -99,13 +105,15 @@ CREATE TABLE `mao_agent` (
   `created_by`   BIGINT       NOT NULL                COMMENT '创建人 ID',
   `created_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`agent_id`),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_agent_id` (`agent_id`),
   KEY `idx_created_by` (`created_by`),
   CONSTRAINT `fk_agent_user` FOREIGN KEY (`created_by`) REFERENCES `mao_user` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='智能体配置表';
 
 -- 技能注册表
 CREATE TABLE `mao_skill` (
+  `id`            BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
   `skill_id`      VARCHAR(64)   NOT NULL                COMMENT '技能唯一标识（如 QueryTaskConfig）',
   `name`          VARCHAR(128)  NOT NULL                COMMENT '技能名称',
   `description`   TEXT          NOT NULL                COMMENT '技能功能描述（供 Agent 语义检索）',
@@ -122,7 +130,8 @@ CREATE TABLE `mao_skill` (
   `created_by`    BIGINT        NOT NULL                COMMENT '创建人 ID',
   `created_at`    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`    DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`skill_id`),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_skill_id` (`skill_id`),
   KEY `idx_type` (`type`),
   KEY `idx_created_by` (`created_by`),
   CONSTRAINT `fk_skill_user` FOREIGN KEY (`created_by`) REFERENCES `mao_user` (`id`)
@@ -142,17 +151,19 @@ CREATE TABLE `mao_agent_skill_rel` (
 
 -- SOP 工作流表
 CREATE TABLE `mao_workflow` (
+  `id`             BIGINT        NOT NULL AUTO_INCREMENT COMMENT '主键',
   `workflow_id`    VARCHAR(64)   NOT NULL                COMMENT '工作流唯一标识 wf_{uuid}',
   `name`           VARCHAR(128)  NOT NULL                COMMENT '工作流名称',
   `description`    TEXT                                  COMMENT '工作流描述',
   `version`        VARCHAR(32)   NOT NULL DEFAULT 'v1.0' COMMENT '版本号',
-  `dag_definition` LONGTEXT      NOT NULL                COMMENT 'DAG 图定义 JSON（节点、边、参数映射）',
+  `dag_definition` TEXT          NOT NULL                COMMENT 'DAG 图定义 JSON（节点、边、参数映射）',
   `status`         VARCHAR(32)   NOT NULL DEFAULT 'DRAFT' COMMENT '状态: DRAFT/PUBLISHED/DEPRECATED',
   `macro_skill_id` VARCHAR(64)                           COMMENT '注册为宏工具后对应的 skill_id',
   `created_by`     BIGINT        NOT NULL                COMMENT '创建人 ID',
   `created_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`     DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`workflow_id`),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_workflow_id` (`workflow_id`),
   KEY `idx_status` (`status`),
   KEY `idx_created_by` (`created_by`),
   CONSTRAINT `fk_workflow_user` FOREIGN KEY (`created_by`) REFERENCES `mao_user` (`id`)

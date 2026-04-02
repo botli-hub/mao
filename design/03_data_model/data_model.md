@@ -1,6 +1,6 @@
 # MAO 平台 — 数据模型设计
 
-> **版本**：V9.1-PROD | **更新日期**：2026-04
+> **版本**：V9.2-PROD | **更新日期**：2026-04
 
 ---
 
@@ -31,7 +31,8 @@
 
 | 字段名 | 类型 | 约束 | 说明 |
 |---|---|---|---|
-| `session_id` | `VARCHAR(64)` | PK | 会话唯一标识，格式：`sess_{uuid}` |
+| `id` | `BIGINT` | PK, AUTO_INCREMENT | 主键 |
+| `session_id` | `VARCHAR(64)` | NOT NULL, UNIQUE | 会话唯一标识，格式：`sess_{uuid}` |
 | `user_id` | `BIGINT` | FK → mao_user.id | 所属用户 |
 | `title` | `VARCHAR(256)` | | 会话标题（由首条消息自动生成） |
 | `context_window` | `TEXT` | | 当前滑动窗口内的压缩上下文 |
@@ -56,12 +57,13 @@
 
 | 字段名 | 类型 | 约束 | 说明 |
 |---|---|---|---|
-| `task_id` | `VARCHAR(64)` | PK | 任务唯一标识，格式：`task_{uuid}` |
+| `id` | `BIGINT` | PK, AUTO_INCREMENT | 主键 |
+| `task_id` | `VARCHAR(64)` | NOT NULL, UNIQUE | 任务唯一标识，格式：`task_{uuid}` |
 | `session_id` | `VARCHAR(64)` | FK → mao_session.session_id | 所属会话 |
 | `agent_id` | `VARCHAR(64)` | FK → mao_agent.agent_id | 承接的 Agent（与 workflow_id 二选一） |
 | `workflow_id` | `VARCHAR(64)` | FK → mao_workflow.workflow_id | 承接的 SOP 画布（与 agent_id 二选一） |
 | `status` | `VARCHAR(32)` | NOT NULL, DEFAULT 'PENDING' | 任务状态（见枚举定义） |
-| `state_snapshot_key` | `VARCHAR(128)` | INDEX | **StateDB 外置快照的 Key**，实际快照存储于 Redis/DynamoDB，严禁存入本表 |
+| `state_snap_key` | `VARCHAR(128)` | INDEX | **StateDB 外置快照的 Key**，实际快照存储于 Redis/DynamoDB，严禁存入本表 |
 | `execution_version` | `VARCHAR(32)` | | 执行时绑定的 SOP 版本号（如 v1.0） |
 | `oa_ticket_id` | `VARCHAR(64)` | | 关联的 OA 审批单号 |
 | `idempotency_key` | `VARCHAR(128)` | UNIQUE | 幂等键：`{task_id}_{card_action_id}` |
@@ -87,7 +89,8 @@
 
 | 字段名 | 类型 | 约束 | 说明 |
 |---|---|---|---|
-| `agent_id` | `VARCHAR(64)` | PK | Agent 唯一标识，格式：`agent_{uuid}` |
+| `id` | `BIGINT` | PK, AUTO_INCREMENT | 主键 |
+| `agent_id` | `VARCHAR(64)` | NOT NULL, UNIQUE | Agent 唯一标识，格式：`agent_{uuid}` |
 | `name` | `VARCHAR(128)` | NOT NULL | Agent 名称（如"任务管理 Agent"） |
 | `description` | `TEXT` | NOT NULL | Agent 职责描述（Router 匹配依据） |
 | `system_prompt` | `TEXT` | NOT NULL | System Prompt 完整内容 |
@@ -101,7 +104,8 @@
 
 | 字段名 | 类型 | 约束 | 说明 |
 |---|---|---|---|
-| `skill_id` | `VARCHAR(64)` | PK | 技能唯一标识（如 `QueryTaskConfig`） |
+| `id` | `BIGINT` | PK, AUTO_INCREMENT | 主键 |
+| `skill_id` | `VARCHAR(64)` | NOT NULL, UNIQUE | 技能唯一标识（如 `QueryTaskConfig`） |
 | `name` | `VARCHAR(128)` | NOT NULL | 技能名称 |
 | `description` | `TEXT` | NOT NULL | 技能功能描述（供 Agent 语义检索） |
 | `type` | `VARCHAR(16)` | NOT NULL | 技能类型：`API` / `VIEW` / `ASYNC` / `MACRO` |
@@ -129,11 +133,12 @@
 
 | 字段名 | 类型 | 约束 | 说明 |
 |---|---|---|---|
-| `workflow_id` | `VARCHAR(64)` | PK | 工作流唯一标识，格式：`wf_{uuid}` |
+| `id` | `BIGINT` | PK, AUTO_INCREMENT | 主键 |
+| `workflow_id` | `VARCHAR(64)` | NOT NULL, UNIQUE | 工作流唯一标识，格式：`wf_{uuid}` |
 | `name` | `VARCHAR(128)` | NOT NULL | 工作流名称（如"上线前资损风险排查 SOP"） |
 | `description` | `TEXT` | | 工作流描述 |
 | `version` | `VARCHAR(32)` | NOT NULL, DEFAULT 'v1.0' | 版本号 |
-| `dag_definition` | `LONGTEXT` | NOT NULL | DAG 图定义 JSON（节点、边、参数映射） |
+| `dag_definition` | `TEXT` | NOT NULL | DAG 图定义 JSON（节点、边、参数映射） |
 | `status` | `VARCHAR(32)` | NOT NULL, DEFAULT 'DRAFT' | 状态：`DRAFT` / `PUBLISHED` / `DEPRECATED` |
 | `macro_skill_id` | `VARCHAR(64)` | | 注册为宏工具后对应的 skill_id |
 | `created_by` | `BIGINT` | FK → mao_user.id | 创建人 |
