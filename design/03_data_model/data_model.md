@@ -1,6 +1,6 @@
 # MAO 平台 — 数据模型设计
 
-> **版本**：V9.0-PROD | **更新日期**：2026-04
+> **版本**：V9.1-PROD | **更新日期**：2026-04
 
 ---
 
@@ -105,7 +105,7 @@
 | `name` | `VARCHAR(128)` | NOT NULL | 技能名称 |
 | `description` | `TEXT` | NOT NULL | 技能功能描述（供 Agent 语义检索） |
 | `type` | `VARCHAR(16)` | NOT NULL | 技能类型：`API` / `VIEW` / `ASYNC` / `MACRO` |
-| `auth_type` | `VARCHAR(32)` | NOT NULL | 鉴权方式：`USER_TOKEN` / `AK_SK` / `OAUTH2` |
+| `auth_type` | `VARCHAR(32)` | NOT NULL | 鉴权方式：`USER_TOKEN` / `SYSTEM_AK_SK` / `OAUTH2_DYNAMIC` |
 | `endpoint` | `VARCHAR(256)` | | HTTP 接口路径（API 类型必填） |
 | `http_method` | `VARCHAR(8)` | | HTTP 方法：`GET` / `POST` / `PUT` / `DELETE` |
 | `input_schema` | `JSON` | NOT NULL | 输入参数 JSON Schema |
