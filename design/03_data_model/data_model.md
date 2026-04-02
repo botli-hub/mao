@@ -1,10 +1,12 @@
 # MAO 平台 — 数据模型设计
 
-> **版本**：V9.0-PROD | **更新日期**：2026-04
+> **版本**：V9.1-PROD | **更新日期**：2026-04
 
 ---
 
 ## 4. 数据库实体表设计
+
+> **契约对齐说明**：接口字段、枚举及错误码的唯一源头为 `design/04_api/api_reference.md`。本文件仅描述存储模型与约束；若与 API 文档存在差异，以 API 文档为准，并需在同一变更中完成同步修订。
 
 ### 4.1 实体关系图 (ER Diagram)
 
@@ -103,7 +105,7 @@
 | `name` | `VARCHAR(128)` | NOT NULL | 技能名称 |
 | `description` | `TEXT` | NOT NULL | 技能功能描述（供 Agent 语义检索） |
 | `type` | `VARCHAR(16)` | NOT NULL | 技能类型：`API` / `VIEW` / `ASYNC` / `MACRO` |
-| `auth_type` | `VARCHAR(32)` | NOT NULL | 鉴权方式：`USER_TOKEN` / `AK_SK` / `OAUTH2` |
+| `auth_type` | `VARCHAR(32)` | NOT NULL | 鉴权方式：`USER_TOKEN` / `SYSTEM_AK_SK` / `OAUTH2_DYNAMIC` |
 | `endpoint` | `VARCHAR(256)` | | HTTP 接口路径（API 类型必填） |
 | `http_method` | `VARCHAR(8)` | | HTTP 方法：`GET` / `POST` / `PUT` / `DELETE` |
 | `input_schema` | `JSON` | NOT NULL | 输入参数 JSON Schema |
@@ -186,7 +188,7 @@
 | `external_app_id` | `VARCHAR(128)` | NOT NULL | 外部应用 ID |
 | `created_at` | `DATETIME` | NOT NULL | 创建时间 |
 
-#### 4.2.13 离线信笱表 `mao_offline_inbox`
+#### 4.2.13 离线信箱表 `mao_offline_inbox`
 
 用于存储用户离线期间产生的消息。渠道适配层在用户重新上线时，根据 `channel_type` 决定是通过 WebSocket 重连推送（Web）还是直接调用机器人接口发送（飞书）。
 
