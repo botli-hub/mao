@@ -43,8 +43,8 @@ MAO 平台的安全防线分为以下五层：
 |---|---|---|
 | **C 端前端** | React + TypeScript + TailwindCSS | SSE 流式渲染、WebSocket 实时推送 |
 | **B 端前端** | React + React Flow | DAG 画布编辑器 |
-| **BFF 网关** | Node.js (Fastify) 或 Go (Gin) | 处理 SSE/WebSocket，低延迟 |
-| **核心后端** | Java (Spring Boot) 或 Go | 调度控制面与执行面 |
+| **BFF 网关** | Python (FastAPI) | 原生支持 async/await，处理 SSE/WebSocket 流式响应 |
+| **核心后端** | Python (FastAPI + Pydantic) | 调度控制面与执行面，完美契合 AI 生态与 JSON Schema 校验 |
 | **状态存储** | Redis (快照) + MySQL (持久化) | Redis 用于深冻结快照，MySQL 用于审计日志 |
 | **消息队列** | Apache Kafka | 高并发异步事件处理 |
 | **向量数据库** | Milvus 或 Qdrant | RAG 知识库检索 |
