@@ -147,6 +147,12 @@ async def _dispatch_message(
     idempotency_key: str | None,
     db: AsyncSession,
 ) -> dict[str, Any]:
+    await db.execute(
+        select(MaoSession)
+        .where(MaoSession.session_id == session_id)
+        .with_for_update()
+    )
+
     if idempotency_key:
         existing = await db.execute(select(MaoTask).where(MaoTask.idempotency_key == idempotency_key))
         if existing.scalar_one_or_none():
@@ -283,44 +289,47 @@ async def execute_card_action(
     idem_key = f"card_action:{effective_idem}"
     if not await redis_client.set(idem_key, "1", nx=True, ex=300):
         raise HTTPException(status_code=409, detail="Duplicate card action (idempotency key already used)")
+    try:
+        # 查找任务
+        result = await db.execute(
+            select(MaoTask).where(MaoTask.task_id == req.task_id).with_for_update()
+        )
+        task = result.scalar_one_or_none()
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
 
-    # 查找任务
-    result = await db.execute(
-        select(MaoTask).where(MaoTask.task_id == req.task_id)
-    )
-    task = result.scalar_one_or_none()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        if task.status != TaskStatus.SUSPENDED.value:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Task is not in SUSPENDED state (current: {task.status})"
+            )
 
-    if task.status != TaskStatus.SUSPENDED.value:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Task is not in SUSPENDED state (current: {task.status})"
+        # 将卡片操作结果写入黑板，恢复任务
+        callback_payload = {
+            "action_id": req.action_id,
+            "action_type": req.action_type,
+            "payload": req.payload,
+            "operator_user_id": current_user.user_id,
+        }
+
+        task_service = TaskService(db)
+        await task_service.resume_task(
+            task=task,
+            callback_payload=callback_payload,
+            agent_config={},
+            skill_registry={},
         )
 
-    # 将卡片操作结果写入黑板，恢复任务
-    callback_payload = {
-        "action_id": req.action_id,
-        "action_type": req.action_type,
-        "payload": req.payload,
-        "operator_user_id": current_user.user_id,
-    }
+        # 双态响应：CANCEL 类操作可同步完成
+        if req.action_type == "CANCEL":
+            await task_service.kill_task(task, reason=f"User cancelled via card action: {req.action_id}")
+            return {"status": "SYNC_COMPLETED", "result": {"message": "操作已取消"}}
 
-    task_service = TaskService(db)
-    await task_service.resume_task(
-        task=task,
-        callback_payload=callback_payload,
-        agent_config={},
-        skill_registry={},
-    )
-
-    # 双态响应：CANCEL 类操作可同步完成
-    if req.action_type == "CANCEL":
-        await task_service.kill_task(task, reason=f"User cancelled via card action: {req.action_id}")
-        return {"status": "SYNC_COMPLETED", "result": {"message": "操作已取消"}}
-
-    # 其他操作异步处理
-    return {"status": "SUSPENDED", "task_id": req.task_id}
+        # 其他操作异步处理
+        return {"status": "SUSPENDED", "task_id": req.task_id}
+    except Exception:
+        await redis_client.delete(idem_key)
+        raise
 
 
 @router.get("/managed-tasks")

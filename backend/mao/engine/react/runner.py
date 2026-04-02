@@ -154,28 +154,77 @@ class ReActRunner:
 
             # 支持并行工具调用（LLM 输出多个 tool_call）
             action_tasks = []
+            executable_tool_calls = []
             for tc in tool_calls:
                 import json
                 tool_name = tc.function.name
                 try:
                     tool_input = json.loads(tc.function.arguments)
                 except json.JSONDecodeError:
-                    tool_input = {}
+                    observation = "ERROR: Invalid JSON format in tool arguments. Please output valid JSON."
+                    await self._record_step(
+                        step_seq=step,
+                        step_type=StepType.OBSERVATION,
+                        content=observation,
+                        tool_name=tool_name,
+                        token_usage={},
+                        latency_ms=0,
+                        blackboard=blackboard,
+                    )
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": observation,
+                    })
+                    continue
+                if not isinstance(tool_input, dict):
+                    observation = "ERROR: Tool arguments must be a JSON object."
+                    await self._record_step(
+                        step_seq=step,
+                        step_type=StepType.OBSERVATION,
+                        content=observation,
+                        tool_name=tool_name,
+                        token_usage={},
+                        latency_ms=0,
+                        blackboard=blackboard,
+                    )
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": observation,
+                    })
+                    continue
 
                 skill_def = self.skill_registry.get(tool_name)
                 if not skill_def:
                     logger.warning(f"[{self.task_id}] Unknown tool: {tool_name}")
+                    observation = f"ERROR: Unknown tool '{tool_name}'. Please select a registered tool."
+                    await self._record_step(
+                        step_seq=step,
+                        step_type=StepType.OBSERVATION,
+                        content=observation,
+                        tool_name=tool_name,
+                        token_usage={},
+                        latency_ms=0,
+                        blackboard=blackboard,
+                    )
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.id,
+                        "content": observation,
+                    })
                     continue
 
                 action_tasks.append(
                     self._execute_single_action(step, tc.id, tool_name, tool_input, skill_def, blackboard)
                 )
+                executable_tool_calls.append(tc)
 
             # 并行执行所有工具调用
             results = await asyncio.gather(*action_tasks, return_exceptions=True)
 
             # 处理执行结果
-            for tc, result in zip(tool_calls, results):
+            for tc, result in zip(executable_tool_calls, results):
                 if isinstance(result, SuspendSignal):
                     await blackboard.save()
                     return {
