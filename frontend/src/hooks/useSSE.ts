@@ -4,6 +4,17 @@ import type { SSEEvent } from '../types'
 
 export function useSSE(sessionId: string, onEvent: (event: SSEEvent) => void) {
   const eventSourceRef = useRef<EventSource | null>(null)
+  const handleMessageEvent = useCallback(
+    (e: Event) => {
+      const customEvent = e as MessageEvent
+      try {
+        onEvent(JSON.parse(customEvent.data))
+      } catch (err) {
+        console.error('Failed to parse SSE event:', err)
+      }
+    },
+    [onEvent],
+  )
 
   useEffect(() => {
     if (!sessionId) return
@@ -11,20 +22,10 @@ export function useSSE(sessionId: string, onEvent: (event: SSEEvent) => void) {
     try {
       eventSourceRef.current = createSSE(sessionId)
 
-      eventSourceRef.current.addEventListener('stream_chunk', (e: Event) => {
-        const customEvent = e as MessageEvent
-        onEvent(JSON.parse(customEvent.data))
-      })
-
-      eventSourceRef.current.addEventListener('action_card', (e: Event) => {
-        const customEvent = e as MessageEvent
-        onEvent(JSON.parse(customEvent.data))
-      })
-
-      eventSourceRef.current.addEventListener('task_summary', (e: Event) => {
-        const customEvent = e as MessageEvent
-        onEvent(JSON.parse(customEvent.data))
-      })
+      eventSourceRef.current.addEventListener('stream_chunk', handleMessageEvent)
+      eventSourceRef.current.addEventListener('action_card', handleMessageEvent)
+      eventSourceRef.current.addEventListener('task_summary', handleMessageEvent)
+      eventSourceRef.current.addEventListener('done', handleMessageEvent)
 
       eventSourceRef.current.addEventListener('error', () => {
         eventSourceRef.current?.close()
@@ -36,7 +37,7 @@ export function useSSE(sessionId: string, onEvent: (event: SSEEvent) => void) {
     return () => {
       eventSourceRef.current?.close()
     }
-  }, [sessionId, onEvent])
+  }, [sessionId, handleMessageEvent])
 
   const close = useCallback(() => {
     eventSourceRef.current?.close()
