@@ -97,12 +97,15 @@ POST /chat/completions
 ```
 
 **响应（text/event-stream）**：
-```
-// 事件1：文本
-event: message
-data: {"task_id": "tsk_001", "type": "text", "content": "好的..."}
 
-// 事件2：GUI卡片下发
+> **内外部记忆隔离规则**：下列 SSE 事件中，`event: message` 和 `event: action_card` 与 `event: task_summary` 才会写入 `mao_message`（Session Memory）。Worker 内部的 Thought/Action/Observation 严禁通过 SSE 将原文写入会话历史，应将其存入 `mao_task_log`。
+
+```
+// 事件1：流式文本增量（STREAM_CHUNK，不写入 mao_message）
+event: message
+data: {"task_id": "tsk_001", "type": "stream_chunk", "content": "好的..."}
+
+// 事件2：GUI卡片下发（CARD，写入 mao_message）
 event: action_card
 data: {
   "task_id": "tsk_001", "type": "card_render",
@@ -112,6 +115,16 @@ data: {
     "actions": [{"id": "submit_oa", "label": "确认提交"}],
     "client_side_lock": true
   }
+}
+
+// 事件3：任务结束摘要（TASK_SUMMARY，写入 mao_message，仅在任务彻底结束或需要人类介入时发出）
+event: task_summary
+data: {
+  "task_id": "tsk_001",
+  "type": "task_summary",
+  "content": "您的排查 SOP 已执行完毕，发现 3 个异常，请查看卡片",
+  "task_status": "COMPLETED",
+  "summary_card": null
 }
 ```
 
@@ -919,7 +932,7 @@ POST /admin/channel-sessions/bind
   "session_id": "sess_001",
   "task_id": "task_xyz789",
   "channel_type": "FEISHU",
-  "message_type": "TEXT | CARD | STREAM_CHUNK | SYSTEM_NOTICE",
+  "message_type": "TEXT | CARD | TASK_SUMMARY | STREAM_CHUNK | SYSTEM_NOTICE",
   "content": {
     "text": "任务执行完成，预算消耗率 87.3%",
     "card_schema": null
@@ -937,7 +950,8 @@ POST /admin/channel-sessions/bind
 |---|---|---|
 | `TEXT` | SSE `event: message` 流式推送 | 调用飞书 `im.message.create` 发送文本消息 |
 | `CARD` | SSE `event: action_card` + WebSocket 推送 | 调用飞书 `im.message.create` 发送 Interactive Card |
-| `STREAM_CHUNK` | SSE `event: message` 流式增量 | 飞书不支持流式，缓冲后一次性发送 |
+| `TASK_SUMMARY` | SSE `event: task_summary`，写入 mao_message | 调用飞书 `im.message.create` 发送文本摘要，可附带卡片链接 |
+| `STREAM_CHUNK` | SSE `event: message` 流式增量，**不写入 mao_message** | 飞书不支持流式，缓冲后一次性发送 |
 | `SYSTEM_NOTICE` | 聊天框顶部系统通知条 | 调用飞书 `im.message.create` 发送系统通知文本 |
 
 #### 8.10.3 飞书 Interactive Card 模板规范

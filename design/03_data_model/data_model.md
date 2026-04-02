@@ -43,13 +43,15 @@
 
 #### 4.2.3 消息表 `mao_message`
 
+> **内外部记忆隔离规则**：本表仅存储用户会话的对话历史（Session Memory）。L4 执行面在推演过程中的 Thought、Action、Observation **绝对禁止写入本表**，应将其存入 `mao_task_log`（Task Scratchpad）。当且仅当任务彻底结束或需要人类介入时，才由 Worker 生成摘要文本（`TASK_SUMMARY`）或视图卡片（`CARD`）写入本表，以保持用户会话窗口的高信噪比。
+
 | 字段名 | 类型 | 约束 | 说明 |
 |---|---|---|---|
 | `id` | `BIGINT` | PK, AUTO_INCREMENT | 消息主键 |
 | `session_id` | `VARCHAR(64)` | FK → mao_session.session_id | 所属会话 |
 | `role` | `VARCHAR(16)` | NOT NULL | 角色：`user` / `assistant` / `system` |
 | `content` | `TEXT` | | 文本内容 |
-| `message_type` | `VARCHAR(32)` | NOT NULL, DEFAULT 'TEXT' | 类型：`TEXT` / `CARD` / `SYSTEM_NOTICE` |
+| `message_type` | `VARCHAR(32)` | NOT NULL, DEFAULT 'TEXT' | 类型：`TEXT`（普通文本）/ `CARD`（交互卡片）/ `TASK_SUMMARY`（**任务结束摘要**，由 Worker 生成）/ `SYSTEM_NOTICE`（系统通知） |
 | `card_schema` | `JSON` | | 卡片 JSON Schema（当 type=CARD 时） |
 | `created_at` | `DATETIME` | NOT NULL | 创建时间 |
 

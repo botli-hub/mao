@@ -286,14 +286,29 @@ public enum MessageRole {
 ### 7.7 消息类型 (MessageType)
 
 ```java
+/**
+ * MessageType 仅适用于 mao_message（Session Memory）表。
+ *
+ * 内外部记忆隔离规则：
+ *   - L4 执行面的 Thought / Action / Observation 严禁写入 mao_message。
+ *   - 上述执行过程应将存入 mao_task_log（Task Scratchpad）。
+ *   - 当且仅当任务彻底结束或需要人类介入时，
+ *     才由 Worker 生成 TASK_SUMMARY 或 CARD 写入 mao_message。
+ */
 public enum MessageType {
-    /** 纯文本消息 */
+    /** 用户或助手的纯文本消息 */
     TEXT("TEXT"),
-    /** 卡片消息（包含 JSON Schema 的交互卡片） */
+    /** 交互卡片（包含 JSON Schema，用于参数确认、高危写入等场景） */
     CARD("CARD"),
-    /** 系统通知（如记忆压缩提示、离线信笱分割线） */
+    /**
+     * 任务结束摘要（仅由 Worker 在任务彻底结束或需要人类介入时生成）。
+     * 示例：“您的排查 SOP 已执行完毕，发现 3 个异常，请查看卡片”
+     * 禁止将 Thought/Action/Observation 原文写入本类型。
+     */
+    TASK_SUMMARY("TASK_SUMMARY"),
+    /** 系统通知（如记忆压缩提示、离线信箱分割线） */
     SYSTEM_NOTICE("SYSTEM_NOTICE"),
-    /** 挂起状态卡片（等待外部审批） */
+    /** 挂起状态卡片（等待外部审批，属于 CARD 的语义子类型） */
     SUSPEND_CARD("SUSPEND_CARD"),
     /** 流式增量块（仅 Web 渠道支持，飞书等渠道缓冲后一次性发送） */
     STREAM_CHUNK("STREAM_CHUNK");
