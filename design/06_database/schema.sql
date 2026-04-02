@@ -1,6 +1,6 @@
 -- ============================================================
 -- MAO 营销多智能体协同编排平台 - 数据库 DDL 建表语句
--- 版本: V9.3-PROD
+-- 版本: V9.4-PROD
 -- 数据库: MySQL 8.0+
 -- 规范: 严格遵循 18 条数据库设计规范
 -- ============================================================
@@ -227,15 +227,19 @@ CREATE TABLE `mao_offline_inbox` (
   `card_schema`     JSON                                COMMENT '消息卡片 Schema',
   `status`          VARCHAR(16) NOT NULL DEFAULT 'UNREAD' COMMENT '状态: UNREAD/READ',
   `read_at`         DATETIME                            COMMENT '阅读时间',
+  `retry_count`     INT         NOT NULL DEFAULT 0      COMMENT '已重试次数（退避重试计数，最大 5 次）',
+  `last_retry_at`   DATETIME                            COMMENT '最近一次重试时间',
   `updated_at`      DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   `created_at`      DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (`id`),
   KEY `idx_user_id_status` (`user_id`, `status`),
+  KEY `idx_retry_count` (`retry_count`),
+  KEY `idx_last_retry_at` (`last_retry_at`),
   KEY `ix_updated_at` (`updated_at`),
   KEY `ix_created_at` (`created_at`),
   CONSTRAINT `fk_inbox_user` FOREIGN KEY (`user_id`) REFERENCES `mao_user` (`id`),
   CONSTRAINT `fk_inbox_task` FOREIGN KEY (`task_id`) REFERENCES `mao_task` (`task_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='离线信箱表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='离线信箱表（支持退避重试投递）';
 
 -- ============================================================
 -- v9.1 新增：渠道适配层相关表

@@ -1,6 +1,6 @@
 # MAO 平台 — 数据模型设计
 
-> **版本**：V9.2-PROD | **更新日期**：2026-04
+> **版本**：V9.4-PROD | **更新日期**：2026-04
 
 ---
 
@@ -206,7 +206,10 @@
 | `message_content` | `TEXT` | NOT NULL | 消息文本内容 |
 | `card_schema` | `JSON` | | 消息卡片 Schema（渠道适配层负责根据渠道翻译格式） |
 | `status` | `VARCHAR(16)` | NOT NULL, DEFAULT 'UNREAD' | 状态：`UNREAD` / `READ` |
-| `created_at` | `DATETIME` | NOT NULL | 创建时间 |
 | `read_at` | `DATETIME` | | 阅读时间 |
+| `retry_count` | `INT` | NOT NULL, DEFAULT 0 | 已重试次数（退避重试计数，最大 5 次） |
+| `last_retry_at` | `DATETIME` | | 最近一次重试时间 |
+| `updated_at` | `DATETIME` | NOT NULL | 更新时间 |
+| `created_at` | `DATETIME` | NOT NULL | 创建时间 |
 
 ---

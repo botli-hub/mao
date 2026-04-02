@@ -109,7 +109,8 @@ data: {
   "card_schema": {
     "component": "TaskConfigForm",
     "payload": {"budget": 20000},
-    "actions": [{"id": "submit_oa", "label": "确认提交"}]
+    "actions": [{"id": "submit_oa", "label": "确认提交"}],
+    "client_side_lock": true
   }
 }
 ```
@@ -156,7 +157,9 @@ POST /chat/action/execute
 }
 ```
 
-> `next_state` 枚举值：`SUSPENDED`（异步挂起，等待外部回调）、`SYNC_COMPLETED`（同步完成，`sync_result` 字段包含业务结果）。
+> `next_state` 枚举値：`SUSPENDED`（异步挂起，等待外部回调）、`SYNC_COMPLETED`（同步完成，`sync_result` 字段包含业务结果）。
+
+> **`client_side_lock` 说明**：`card_schema` 中的 `client_side_lock: true` 属性指示渠道适配层在下发卡片时启用渠道原生物理锁定能力：飞书渠道自动设置卡片的 `Exclusive` 属性（点击后卡片即时灰化且仅首个点击生效）；Web 端前端在按鈕点击后立即设置按鈕为禁用状态直到收到服务端响应。此机制与后端幂等防护共同构成双层防抖。
 
 #### 8.2.5 拉取离线消息信箱
 
@@ -173,7 +176,16 @@ GET /chat/offline-inbox
   "data": {
     "unread_count": 1,
     "messages": [
-      {"task_id": "tsk_001", "type": "async_result", "quote_ref_id": "msg_OA-8902", "content": "您的审批已通过。"}
+      {
+        "id": 42,
+        "task_id": "tsk_001",
+        "type": "async_result",
+        "quote_ref_id": "msg_OA-8902",
+        "content": "您的审批已通过。",
+        "channel_type": "WEB",
+        "retry_count": 0,
+        "last_retry_at": null
+      }
     ]
   }
 }
@@ -371,6 +383,15 @@ POST /admin/agents/{agent_id}/publish
     "version_id": "v1.3",
     "validation_results": [{"level": "WARN", "msg": "提示词未引用知识库"}]
   }
+}
+```
+
+> **宏工具环路检测**：发布时系统会对该 Agent 所有已挂载技能进行 DFS 环路检测。若发现某个 `MACRO` 类型技能的实际工作流内包含当前 Agent（即 Agent A 调用 Macro B，Macro B 内部的 SOP 画布又调用 Agent A），发布将被阻断，返回错误码 `422` 和具体环路路径描述：
+```json
+{
+  "code": 422,
+  "error": "MACRO_CYCLE_DETECTED",
+  "detail": "Cycle path: agent_A -> macro_B (wf_xxx) -> agent_A"
 }
 ```
 
