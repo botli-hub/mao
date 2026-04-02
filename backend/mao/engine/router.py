@@ -98,7 +98,7 @@ class IntentRouter:
         """使用 LLM 进行语义路由。"""
         llm_result: dict[str, Any] | None = None
         if settings.engine_semantic_cache_enabled:
-            cached = await self._semantic_cache_lookup(user_message)
+            cached = await self._semantic_cache_lookup(user_message, candidates)
             if cached:
                 return cached
 
@@ -177,9 +177,18 @@ class IntentRouter:
         )
         return rsp.data[0].embedding
 
-    async def _semantic_cache_lookup(self, user_message: str) -> RouterResult | None:
+    async def _semantic_cache_lookup(
+        self,
+        user_message: str,
+        candidates: list[dict[str, Any]],
+    ) -> RouterResult | None:
         """语义缓存命中：相似问题直接复用路由结果，避免重复 LLM 路由开销。"""
         try:
+            active_targets = {
+                (str(item.get("type", "")).upper(), str(item.get("id")))
+                for item in candidates
+                if item.get("id")
+            }
             target_embedding = await self._embed(user_message)
             cache_items = await semantic_cache_get(
                 namespace="intent-router",
@@ -196,9 +205,20 @@ class IntentRouter:
                     best_score = score
                     best_item = item
             if best_item and best_score >= settings.engine_semantic_cache_threshold:
+                cached_route_type = str(best_item.get("route_type", "DIRECT_REPLY")).upper()
+                cached_target_id = best_item.get("target_id")
+                if cached_route_type in {"AGENT", "WORKFLOW"}:
+                    target_key = (cached_route_type, str(cached_target_id))
+                    if target_key not in active_targets:
+                        logger.info(
+                            "Semantic cache stale target ignored: route_type=%s target_id=%s",
+                            cached_route_type,
+                            cached_target_id,
+                        )
+                        return None
                 return RouterResult(
-                    route_type=best_item.get("route_type", "DIRECT_REPLY"),
-                    target_id=best_item.get("target_id"),
+                    route_type=cached_route_type,
+                    target_id=cached_target_id,
                     target_name=best_item.get("target_name"),
                     confidence=float(best_item.get("confidence", 0.8)),
                     reason=f"Semantic cache hit (score={best_score:.3f})",

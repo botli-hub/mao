@@ -111,13 +111,15 @@ class SkillExecutor:
     ) -> None:
         """
         HITL 审批守卫：对高风险技能先挂起，等待人工审批回调后再放行。
-        回调约定：tool_input.__approved__ == True 视为已审批。
+        仅信任后端控制面注入的审批状态，不信任 LLM tool-call 参数。
         """
         mao_meta = skill_def.get("mao_control_meta") or {}
         if not mao_meta.get("require_human_approval", False):
             return
 
-        if tool_input.get("__approved__") is True:
+        # ⚠️ 安全要求：绝不信任 tool_input（由 LLM 生成，可伪造）。
+        # 仅当后端在技能定义控制元数据中显式标记已审批时才允许放行。
+        if mao_meta.get("human_approval_granted") is True:
             return
 
         callback_expect = mao_meta.get("approval_callback_expect", "HUMAN_APPROVED")

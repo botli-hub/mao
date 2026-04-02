@@ -51,8 +51,12 @@ async def lifespan(_: FastAPI):
 
     try:
         async with asyncio.TaskGroup() as tg:
-            tg.create_task(_run_background_service("archiver", archiver.start, shutdown_event))
-            tg.create_task(_run_background_service("inbox_retrier", retrier.start, shutdown_event))
+            archiver_task = tg.create_task(
+                _run_background_service("archiver", archiver.start, shutdown_event)
+            )
+            retrier_task = tg.create_task(
+                _run_background_service("inbox_retrier", retrier.start, shutdown_event)
+            )
             logger.info("MAO Platform started successfully")
             yield
 
@@ -60,6 +64,8 @@ async def lifespan(_: FastAPI):
             shutdown_event.set()
             await archiver.stop()
             await retrier.stop()
+            archiver_task.cancel()
+            retrier_task.cancel()
             await stop_scheduler()
             logger.info("MAO Platform shutdown complete")
     finally:
