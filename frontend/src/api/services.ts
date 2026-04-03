@@ -52,6 +52,7 @@ export const agentAPI = {
     apiClient.post(`/admin/agents/${agentId}/skills`, { skill_id: skillId }),
   unbindSkill: (agentId: string, skillId: string) =>
     apiClient.delete(`/admin/agents/${agentId}/skills/${skillId}`),
+  delete: (agentId: string) => apiClient.delete(`/admin/agents/${agentId}`),
 }
 
 // ─── 工作流 ────────────────────────────────────────────────────────────────
@@ -64,6 +65,11 @@ export const workflowAPI = {
     apiClient.post<Workflow>('/admin/workflows', { name, description }),
   update: (workflowId: string, payload: Partial<Workflow>) =>
     apiClient.put<Workflow>(`/admin/workflows/${workflowId}`, payload),
+  publish: (workflowId: string) => apiClient.post(`/admin/workflows/${workflowId}/publish`),
+  getSnapshots: (workflowId: string) =>
+    apiClient.get<Array<{ snapshot_id: string; version: string; published_at: string; published_by: string }>>(`/admin/workflows/${workflowId}/snapshots`),
+  rollback: (workflowId: string, version: string) =>
+    apiClient.post(`/admin/workflows/${workflowId}/snapshots/${version}/restore`),
   delete: (workflowId: string) => apiClient.delete(`/admin/workflows/${workflowId}`),
 }
 

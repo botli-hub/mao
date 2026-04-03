@@ -1,8 +1,6 @@
 import { create } from 'zustand'
 import type { User, Session, Message, Task } from '../types'
 
-// ─── 认证 Store ────────────────────────────────────────────────────────────
-
 interface AuthStore {
   user: User | null
   token: string | null
@@ -15,7 +13,6 @@ export const useAuthStore = create<AuthStore>((set) => ({
   user: null,
   token: localStorage.getItem('mao_token'),
   login: async (email: string, password: string) => {
-    // 实际实现应调用 /auth/login API
     const token = 'mock_token_' + Date.now()
     localStorage.setItem('mao_token', token)
     set({ token, user: { user_id: '1', username: email, email, role: 'user' } })
@@ -27,18 +24,19 @@ export const useAuthStore = create<AuthStore>((set) => ({
   setUser: (user) => set({ user }),
 }))
 
-// ─── 聊天 Store ────────────────────────────────────────────────────────────
-
 interface ChatStore {
   sessions: Session[]
   currentSessionId: string | null
   messages: Message[]
   isLoading: boolean
+  transientStream: string
   setSessions: (sessions: Session[]) => void
   setCurrentSession: (sessionId: string | null) => void
   setMessages: (messages: Message[]) => void
   addMessage: (message: Message) => void
   setIsLoading: (loading: boolean) => void
+  appendTransientStream: (delta: string) => void
+  clearTransientStream: () => void
 }
 
 export const useChatStore = create<ChatStore>((set) => ({
@@ -46,14 +44,15 @@ export const useChatStore = create<ChatStore>((set) => ({
   currentSessionId: null,
   messages: [],
   isLoading: false,
+  transientStream: '',
   setSessions: (sessions) => set({ sessions }),
-  setCurrentSession: (sessionId) => set({ currentSessionId: sessionId }),
+  setCurrentSession: (sessionId) => set({ currentSessionId: sessionId, transientStream: '' }),
   setMessages: (messages) => set({ messages }),
   addMessage: (message) => set((state) => ({ messages: [...state.messages, message] })),
   setIsLoading: (loading) => set({ isLoading: loading }),
+  appendTransientStream: (delta) => set((state) => ({ transientStream: state.transientStream + delta })),
+  clearTransientStream: () => set({ transientStream: '' }),
 }))
-
-// ─── 管理后台 Store ────────────────────────────────────────────────────────
 
 interface AdminStore {
   activeTasks: Task[]

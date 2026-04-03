@@ -26,10 +26,8 @@ export function useSSE(sessionId: string, onEvent: (event: SSEEvent) => void) {
       eventSourceRef.current.addEventListener('action_card', handleMessageEvent)
       eventSourceRef.current.addEventListener('task_summary', handleMessageEvent)
       eventSourceRef.current.addEventListener('done', handleMessageEvent)
-
-      eventSourceRef.current.addEventListener('error', () => {
-        eventSourceRef.current?.close()
-      })
+      eventSourceRef.current.addEventListener('task_status', handleMessageEvent)
+      eventSourceRef.current.addEventListener('error', handleMessageEvent)
     } catch (err) {
       console.error('SSE connection error:', err)
     }
