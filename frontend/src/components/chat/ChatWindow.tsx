@@ -6,16 +6,26 @@ import { useSSE } from '../../hooks/useSSE'
 import { GUICard } from '../ui/Card'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
+import { chatAPI } from '../../api/services'
 import type { Message, SSEEvent } from '../../types'
 import { cn } from '../../utils/cn'
+import toast from 'react-hot-toast'
 
 export function ChatWindow() {
-  const { currentSessionId, messages, addMessage, setIsLoading } = useChatStore()
+  const {
+    currentSessionId,
+    messages,
+    transientStream,
+    addMessage,
+    setIsLoading,
+    appendTransientStream,
+    clearTransientStream,
+  } = useChatStore()
   const [inputValue, setInputValue] = React.useState('')
   const [isStreaming, setIsStreaming] = React.useState(false)
-  const [streamingContent, setStreamingContent] = React.useState('')
+  const [lockedCards, setLockedCards] = React.useState<Record<string, boolean>>({})
+  const [cardLoading, setCardLoading] = React.useState<Record<string, boolean>>({})
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const currentMessageRef = useRef<string>('')
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -23,53 +33,78 @@ export function ChatWindow() {
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages])
+  }, [messages, transientStream])
+
+  useEffect(() => {
+    setIsStreaming(false)
+    clearTransientStream()
+  }, [currentSessionId, clearTransientStream])
 
   const handleSSEEvent = (event: SSEEvent) => {
+    if (!currentSessionId) return
+
     if (event.event === 'stream_chunk' && event.data.delta) {
-      currentMessageRef.current += event.data.delta
-      setStreamingContent(currentMessageRef.current)
+      appendTransientStream(event.data.delta)
       setIsStreaming(true)
-    } else if (event.event === 'action_card' && event.data.card_schema) {
+      return
+    }
+
+    if (event.event === 'action_card' && event.data.card_schema) {
       const msg: Message = {
         message_id: event.data.message_id ?? `msg_${Date.now()}`,
-        session_id: currentSessionId!,
+        session_id: currentSessionId,
         role: 'assistant',
         message_type: 'CARD',
         content: '',
         card_schema: event.data.card_schema,
+        task_id: event.data.task_id,
         created_at: new Date().toISOString(),
       }
       addMessage(msg)
-      currentMessageRef.current = ''
-      setStreamingContent('')
-    } else if (event.event === 'task_summary') {
+      clearTransientStream()
+      setIsStreaming(false)
+      setIsLoading(false)
+      return
+    }
+
+    if (event.event === 'task_summary') {
       const msg: Message = {
         message_id: event.data.message_id ?? `msg_${Date.now()}`,
-        session_id: currentSessionId!,
+        session_id: currentSessionId,
         role: 'assistant',
         message_type: 'TASK_SUMMARY',
         content: event.data.content ?? '',
+        quote_ref_id: event.data.quote_ref_id,
         created_at: new Date().toISOString(),
       }
       addMessage(msg)
       setIsStreaming(false)
-      setStreamingContent('')
+      clearTransientStream()
       setIsLoading(false)
-    } else if (event.event === 'done') {
-      if (currentMessageRef.current) {
+      return
+    }
+
+    if (event.event === 'error') {
+      toast.error(event.data.error ?? '任务执行失败')
+      setIsStreaming(false)
+      clearTransientStream()
+      setIsLoading(false)
+      return
+    }
+
+    if (event.event === 'done') {
+      if (transientStream) {
         const msg: Message = {
           message_id: event.data.message_id ?? `msg_${Date.now()}`,
-          session_id: currentSessionId!,
+          session_id: currentSessionId,
           role: 'assistant',
           message_type: 'TEXT',
-          content: currentMessageRef.current,
+          content: transientStream,
           created_at: new Date().toISOString(),
         }
         addMessage(msg)
-        currentMessageRef.current = ''
-        setStreamingContent('')
       }
+      clearTransientStream()
       setIsStreaming(false)
       setIsLoading(false)
     }
@@ -80,19 +115,53 @@ export function ChatWindow() {
   const handleSendMessage = async () => {
     if (!inputValue.trim() || !currentSessionId) return
 
+    const text = inputValue
     const userMsg: Message = {
       message_id: `msg_${Date.now()}`,
       session_id: currentSessionId,
       role: 'user',
       message_type: 'TEXT',
-      content: inputValue,
+      content: text,
       created_at: new Date().toISOString(),
     }
     addMessage(userMsg)
+    clearTransientStream()
     setInputValue('')
     setIsLoading(true)
 
-    // 实际实现应调用 chatAPI.sendMessage
+    try {
+      await chatAPI.sendMessage(currentSessionId, text)
+    } catch (err) {
+      toast.error('发送消息失败')
+      setIsLoading(false)
+      console.error(err)
+    }
+  }
+
+  const handleCardAction = async (
+    messageId: string,
+    actionId: string,
+    formData?: Record<string, unknown>,
+  ) => {
+    if (!currentSessionId) return
+
+    const message = messages.find((item) => item.message_id === messageId)
+    if (!message) return
+
+    setCardLoading((prev) => ({ ...prev, [messageId]: true }))
+
+    try {
+      await chatAPI.executeCardAction(currentSessionId, messageId, actionId, formData)
+      if (message.card_schema?.client_side_lock) {
+        setLockedCards((prev) => ({ ...prev, [messageId]: true }))
+      }
+      toast.success('已提交卡片操作')
+    } catch (err) {
+      toast.error('卡片提交失败，请重试')
+      console.error(err)
+    } finally {
+      setCardLoading((prev) => ({ ...prev, [messageId]: false }))
+    }
   }
 
   if (!currentSessionId) {
@@ -104,8 +173,11 @@ export function ChatWindow() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-white">
-      {/* 消息列表 */}
+    <div className="flex flex-col h-full bg-white flex-1">
+      <div className="border-b border-gray-200 px-6 py-3 bg-white text-sm text-gray-600">
+        💡 为保证响应速度与调度性能，过往长时记忆可能被自动归档。
+      </div>
+
       <div className="flex-1 overflow-y-auto p-6 space-y-4">
         {messages.map((msg) => (
           <div
@@ -116,9 +188,10 @@ export function ChatWindow() {
               <div className="max-w-2xl w-full">
                 <GUICard
                   schema={msg.card_schema}
+                  isLocked={lockedCards[msg.message_id]}
+                  isLoading={cardLoading[msg.message_id]}
                   onActionClick={(actionId, formData) => {
-                    // 实际实现应调用 chatAPI.executeCardAction
-                    console.log('Action clicked:', actionId, formData)
+                    void handleCardAction(msg.message_id, actionId, formData)
                   }}
                 />
               </div>
@@ -128,9 +201,14 @@ export function ChatWindow() {
                   'max-w-2xl px-4 py-3 rounded-lg',
                   msg.role === 'user'
                     ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-900',
+                    : msg.message_type === 'SYSTEM_NOTICE'
+                      ? 'bg-gray-50 text-gray-500 border border-dashed border-gray-300 w-full text-center'
+                      : 'bg-gray-100 text-gray-900',
                 )}
               >
+                {msg.quote_ref_id && (
+                  <p className="text-xs text-indigo-600 mb-2">🔗 引用：{msg.quote_ref_id}</p>
+                )}
                 <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm">
                   {msg.content}
                 </ReactMarkdown>
@@ -138,11 +216,11 @@ export function ChatWindow() {
             )}
           </div>
         ))}
-        {isStreaming && streamingContent && (
+        {isStreaming && transientStream && (
           <div className="flex justify-start">
             <div className="max-w-2xl px-4 py-3 rounded-lg bg-gray-100 text-gray-900">
               <ReactMarkdown remarkPlugins={[remarkGfm]} className="prose prose-sm">
-                {streamingContent}
+                {transientStream}
               </ReactMarkdown>
               <span className="animate-pulse">▌</span>
             </div>
@@ -151,17 +229,16 @@ export function ChatWindow() {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* 输入框 */}
       <div className="border-t border-gray-200 p-4 bg-gray-50">
         <div className="flex gap-3">
           <Input
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && void handleSendMessage()}
             placeholder="输入消息..."
             disabled={isStreaming}
           />
-          <Button onClick={handleSendMessage} isLoading={isStreaming}>
+          <Button onClick={() => void handleSendMessage()} isLoading={isStreaming}>
             发送
           </Button>
         </div>

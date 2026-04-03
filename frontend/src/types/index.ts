@@ -59,6 +59,7 @@ export interface Message {
   content: string
   card_schema?: CardSchema
   task_id?: string
+  quote_ref_id?: string
   created_at: string
 }
 
@@ -227,6 +228,7 @@ export interface SSEEvent {
     status?: TaskStatus
     content?: string
     error?: string
+    quote_ref_id?: string
   }
 }
 
