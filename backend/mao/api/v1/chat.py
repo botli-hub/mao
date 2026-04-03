@@ -5,6 +5,7 @@ C 端聊天 API 路由
 import asyncio
 import json
 import logging
+from datetime import datetime, UTC
 from typing import Any, AsyncGenerator
 
 import ulid
@@ -15,7 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from mao.core.enums import MessageType, TaskStatus
-from mao.core.redis_client import sse_subscribe
+from mao.core.redis_client import get_cache_client, sse_subscribe
 from mao.core.security import get_current_user
 from mao.db.database import get_db
 from mao.db.models.message import MaoMessage
@@ -83,6 +84,10 @@ class OfflineInboxItem(BaseModel):
     created_at: str
 
 
+class OfflineInboxAckRequest(BaseModel):
+    inbox_ids: list[int] = Field(default_factory=list, description="需要确认消费的离线信箱 ID 列表；为空时忽略")
+
+
 # ─────────────────────────────────────────────
 # 接口实现
 # ─────────────────────────────────────────────
@@ -147,55 +152,65 @@ async def _dispatch_message(
     idempotency_key: str | None,
     db: AsyncSession,
 ) -> dict[str, Any]:
+    idem_lock_key: str | None = None
+    redis = get_cache_client()
+    if idempotency_key:
+        idem_lock_key = f"idem:chat_dispatch:{idempotency_key}"
+        if not await redis.set(idem_lock_key, "1", nx=True, ex=120):
+            raise HTTPException(status_code=409, detail="Duplicate request (idempotency key in-flight)")
+
     await db.execute(
         select(MaoSession)
         .where(MaoSession.session_id == session_id)
         .with_for_update()
     )
+    try:
+        if idempotency_key:
+            existing = await db.execute(select(MaoTask).where(MaoTask.idempotency_key == idempotency_key))
+            if existing.scalar_one_or_none():
+                raise HTTPException(status_code=409, detail="Duplicate request (idempotency key already used)")
 
-    if idempotency_key:
-        existing = await db.execute(select(MaoTask).where(MaoTask.idempotency_key == idempotency_key))
-        if existing.scalar_one_or_none():
-            raise HTTPException(status_code=409, detail="Duplicate request (idempotency key already used)")
+        user_msg = MaoMessage(session_id=session_id, role="user", content=user_content, message_type=MessageType.TEXT.value)
+        db.add(user_msg)
 
-    user_msg = MaoMessage(session_id=session_id, role="user", content=user_content, message_type=MessageType.TEXT.value)
-    db.add(user_msg)
+        intent_router = IntentRouter(db)
+        route_result = await intent_router.route(user_content)
 
-    intent_router = IntentRouter(db)
-    route_result = await intent_router.route(user_content)
+        if route_result.route_type == "CLARIFICATION_REQUIRED":
+            card_schema = {
+                "title": "意图澄清",
+                "elements": [{"type": "text", "content": "检测到多个可承接对象，请手动选择。"}],
+                "actions": [
+                    {
+                        "action_id": f"clarify:{item.get('type')}:{item.get('id')}",
+                        "label": item.get("name", "未命名"),
+                        "action_type": "SELECT_INTENT",
+                        "payload": item,
+                    }
+                    for item in route_result.clarification_candidates
+                ],
+                "client_side_lock": True,
+            }
+            db.add(MaoMessage(session_id=session_id, role="assistant", message_type=MessageType.CARD.value, card_schema=card_schema))
+            await db.commit()
+            return {"task_id": None, "status": "SUSPENDED", "route_type": route_result.route_type, "card_schema": card_schema}
 
-    if route_result.route_type == "CLARIFICATION_REQUIRED":
-        card_schema = {
-            "title": "意图澄清",
-            "elements": [{"type": "text", "content": "检测到多个可承接对象，请手动选择。"}],
-            "actions": [
-                {
-                    "action_id": f"clarify:{item.get('type')}:{item.get('id')}",
-                    "label": item.get("name", "未命名"),
-                    "action_type": "SELECT_INTENT",
-                    "payload": item,
-                }
-                for item in route_result.clarification_candidates
-            ],
-            "client_side_lock": True,
-        }
-        db.add(MaoMessage(session_id=session_id, role="assistant", message_type=MessageType.CARD.value, card_schema=card_schema))
+        task_service = TaskService(db)
+        task = await task_service.create_task(
+            session_id=session_id,
+            agent_id=route_result.target_id if route_result.route_type == "AGENT" else None,
+            workflow_id=route_result.target_id if route_result.route_type == "WORKFLOW" else None,
+            idempotency_key=idempotency_key,
+        )
         await db.commit()
-        return {"task_id": None, "status": "SUSPENDED", "route_type": route_result.route_type, "card_schema": card_schema}
 
-    task_service = TaskService(db)
-    task = await task_service.create_task(
-        session_id=session_id,
-        agent_id=route_result.target_id if route_result.route_type == "AGENT" else None,
-        workflow_id=route_result.target_id if route_result.route_type == "WORKFLOW" else None,
-        idempotency_key=idempotency_key,
-    )
-    await db.commit()
+        if route_result.route_type != "DIRECT_REPLY":
+            asyncio.create_task(task_service.run_task(task=task, user_message=user_content, agent_config={}, skill_registry={}))
 
-    if route_result.route_type != "DIRECT_REPLY":
-        asyncio.create_task(task_service.run_task(task=task, user_message=user_content, agent_config={}, skill_registry={}))
-
-    return {"task_id": task.task_id, "status": task.status, "route_type": route_result.route_type, "routed_to": route_result.target_name}
+        return {"task_id": task.task_id, "status": task.status, "route_type": route_result.route_type, "routed_to": route_result.target_name}
+    finally:
+        if idem_lock_key:
+            await redis.delete(idem_lock_key)
 
 
 @router.post("/completions")
@@ -282,7 +297,7 @@ async def execute_card_action(
     幂等键必填，防止卡片二次触发（配合 client_side_lock 物理防抖）。
     """
     # 幂等检查：同一 idempotency_key 只处理一次
-    from mao.core.redis_client import redis_client
+    redis_client = get_cache_client()
     effective_idem = req.idempotency_key or idempotency_key_header
     if not effective_idem:
         raise HTTPException(status_code=400, detail="Idempotency key required")
@@ -384,8 +399,25 @@ async def get_offline_inbox(
         .order_by(MaoOfflineInbox.created_at.desc())
         .offset(offset)
         .limit(page_size)
+        .with_for_update()
     )
     items = result.scalars().all()
+
+    now = datetime.now(UTC)
+    for item in items:
+        item.is_read = True
+        item.read_at = now
+        db.add(
+            MaoMessage(
+                session_id=item.session_id,
+                role="assistant" if item.message_type in ("TASK_SUMMARY", "CARD") else "system",
+                content=item.message_content,
+                message_type=item.message_type,
+                card_schema=item.card_schema,
+            )
+        )
+    await db.commit()
+
     return [
         OfflineInboxItem(
             inbox_id=item.id,
@@ -399,5 +431,33 @@ async def get_offline_inbox(
     ]
 
 
+@router.post("/offline-inbox/ack")
+async def ack_offline_inbox(
+    req: OfflineInboxAckRequest,
+    current_user: MaoUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """确认消费离线信箱消息。"""
+    if not req.inbox_ids:
+        return {"acked_count": 0}
+
+    result = await db.execute(
+        select(MaoOfflineInbox)
+        .where(
+            MaoOfflineInbox.user_id == current_user.user_id,
+            MaoOfflineInbox.id.in_(req.inbox_ids),
+            MaoOfflineInbox.is_read == False,  # noqa: E712
+        )
+        .with_for_update()
+    )
+    items = result.scalars().all()
+    now = datetime.now(UTC)
+    for item in items:
+        item.is_read = True
+        item.read_at = now
+    await db.commit()
+    return {"acked_count": len(items)}
+
+
 # 避免循环导入
-from mao.db.models.task import MaoOfflineInbox  # noqa: E402
+from mao.db.models.channel import MaoOfflineInbox  # noqa: E402

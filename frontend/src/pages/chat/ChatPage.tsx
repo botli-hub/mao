@@ -3,7 +3,7 @@ import { useChatStore } from '../../stores'
 import { auditAPI, chatAPI } from '../../api/services'
 import { ChatWindow } from '../../components/chat/ChatWindow'
 import { SessionSidebar } from '../../components/chat/SessionSidebar'
-import type { ManagedTask, Message } from '../../types'
+import type { ManagedTask } from '../../types'
 import toast from 'react-hot-toast'
 
 export function ChatPage() {
@@ -46,30 +46,11 @@ export function ChatPage() {
 
   const loadSessionMessages = async (sessionId: string) => {
     try {
-      const [historyRes, inboxRes] = await Promise.all([
-        chatAPI.getMessages(sessionId),
-        chatAPI.getOfflineInbox(sessionId),
-      ])
+      const inboxRes = await chatAPI.getOfflineInbox()
+      setHasOfflineInbox(inboxRes.data.length > 0)
 
-      const history = historyRes.data
-      const inbox = inboxRes.data
-      const hasInbox = inbox.length > 0
-      setHasOfflineInbox(hasInbox)
-
-      const divider: Message[] = hasInbox
-        ? [
-            {
-              message_id: `offline_divider_${Date.now()}`,
-              session_id: sessionId,
-              role: 'system',
-              message_type: 'SYSTEM_NOTICE',
-              content: '———— 以下为离线期间执行完毕的任务 ————',
-              created_at: new Date().toISOString(),
-            },
-          ]
-        : []
-
-      setMessages([...history, ...divider, ...inbox])
+      const historyRes = await chatAPI.getMessages(sessionId)
+      setMessages(historyRes.data)
     } catch (err) {
       toast.error('加载消息失败')
       console.error(err)
