@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, JSON, String, Text, func
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from mao.db.database import Base
@@ -39,6 +40,47 @@ class MaoAgent(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=func.now(), comment="创建时间"
     )
+
+    @hybrid_property
+    def model_config(self) -> dict[str, Any]:
+        return self.model_config_data or {}
+
+    @model_config.setter
+    def model_config(self, value: dict[str, Any] | None) -> None:
+        self.model_config_data = value or {}
+
+    @hybrid_property
+    def current_version(self) -> str | None:
+        return self.published_version
+
+    @current_version.setter
+    def current_version(self, value: str | None) -> None:
+        self.published_version = value
+
+    @hybrid_property
+    def max_steps(self) -> int:
+        return int((self.model_config_data or {}).get("max_steps", 10))
+
+    @max_steps.setter
+    def max_steps(self, value: int) -> None:
+        cfg = dict(self.model_config_data or {})
+        cfg["max_steps"] = value
+        self.model_config_data = cfg
+
+    @hybrid_property
+    def rag_kb_ids(self) -> list[str]:
+        cfg = self.rag_retrieval_config or {}
+        kb_ids = cfg.get("rag_kb_ids")
+        if isinstance(kb_ids, list):
+            return [str(v) for v in kb_ids]
+        knowledge_base_id = cfg.get("knowledge_base_id")
+        return [str(knowledge_base_id)] if knowledge_base_id else []
+
+    @rag_kb_ids.setter
+    def rag_kb_ids(self, value: list[str]) -> None:
+        cfg = dict(self.rag_retrieval_config or {})
+        cfg["rag_kb_ids"] = value
+        self.rag_retrieval_config = cfg
 
     # 关联
     creator: Mapped["MaoUser"] = relationship(back_populates="agents")  # type: ignore[name-defined]

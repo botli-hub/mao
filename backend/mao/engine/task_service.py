@@ -22,6 +22,7 @@ from mao.core.redis_client import (
     state_get_steps,
 )
 from mao.db.models.message import MaoMessage
+from mao.db.models.session import MaoSession
 from mao.db.models.task import MaoTask, MaoTaskLog, MaoTaskSnapshotArchive
 from mao.engine.react.blackboard import Blackboard
 from mao.engine.react.runner import (
@@ -118,6 +119,7 @@ class TaskService:
             result = await runner.run(
                 user_message=user_message,
                 blackboard=blackboard,
+                history_messages=await self._build_history_messages(task.session_id),
                 step_offset=step_offset,
             )
 
@@ -296,3 +298,30 @@ class TaskService:
         if error_message:
             task.error_message = error_message
         self.db.add(task)
+
+    async def _build_history_messages(self, session_id: str) -> list[dict[str, str]]:
+        """按会话窗口加载历史消息，作为 LLM 上下文输入。"""
+        session_result = await self.db.execute(
+            select(MaoSession).where(MaoSession.session_id == session_id)
+        )
+        session = session_result.scalar_one_or_none()
+        context_window = session.context_window if session else 20
+
+        result = await self.db.execute(
+            select(MaoMessage)
+            .where(MaoMessage.session_id == session_id)
+            .order_by(MaoMessage.created_at.desc())
+            .limit(max(context_window, 0))
+        )
+        rows = list(reversed(result.scalars().all()))
+
+        history: list[dict[str, str]] = []
+        for msg in rows:
+            if msg.message_type == MessageType.CARD.value:
+                continue
+            content = msg.content or ""
+            if not content.strip():
+                continue
+            role = msg.role if msg.role in {"user", "assistant", "system"} else "system"
+            history.append({"role": role, "content": content})
+        return history

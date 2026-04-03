@@ -15,7 +15,7 @@ export const chatAPI = {
     apiClient.post<Message>(`/chat/sessions/${sessionId}/messages`, { content }),
   executeCardAction: (sessionId: string, messageId: string, actionId: string, formData?: Record<string, unknown>) =>
     apiClient.post(`/chat/action/execute`, { session_id: sessionId, message_id: messageId, action_id: actionId, form_data: formData }),
-  getOfflineInbox: (sessionId: string) => apiClient.get<Message[]>(`/chat/offline-inbox?session_id=${sessionId}`),
+  getOfflineInbox: () => apiClient.get<Message[]>('/chat/offline-inbox'),
   getManagedTasks: () => apiClient.get<PaginatedResponse<ManagedTask>>('/chat/managed-tasks'),
 }
 

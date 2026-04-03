@@ -75,6 +75,7 @@ class ReActRunner:
         self,
         user_message: str,
         blackboard: Blackboard,
+        history_messages: list[dict[str, str]] | None = None,
         step_offset: int = 0,
     ) -> dict[str, Any]:
         """
@@ -85,10 +86,10 @@ class ReActRunner:
         :returns: 最终执行结果 {"status": "COMPLETED|SUSPENDED|CARD_EMITTED", ...}
         """
         system_prompt = self._build_system_prompt(blackboard)
-        messages: list[dict[str, Any]] = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ]
+        messages: list[dict[str, Any]] = [{"role": "system", "content": system_prompt}]
+        if history_messages:
+            messages.extend(history_messages)
+        messages.append({"role": "user", "content": user_message})
 
         for step in range(step_offset + 1, step_offset + self.max_steps + 1):
             # ── Thought：调用 LLM 推演 ──────────────────────────────────────

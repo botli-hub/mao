@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import BigInteger, DateTime, Index, Integer, JSON, String, Text, func
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import Mapped, mapped_column
 
 from mao.db.database import Base
@@ -89,3 +90,7 @@ class MaoOfflineInbox(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=func.now(), comment="创建时间"
     )
+
+    @hybrid_property
+    def status(self) -> str:
+        return "READ" if self.is_read else "UNREAD"
